@@ -58,11 +58,64 @@ For local testing, use ngrok: `ngrok http 3000` then set webhook to the ngrok UR
 
 ---
 
-## Next session: Start from Prompt 5 (Restaurant onboarding)
+## 2026-05-04 — Milestone 1B (Prompts 5–7)
 
-### Prompt 5 checklist:
-- Role picker page (customer vs restaurant owner)
-- Multi-step restaurant onboarding (info → address/map → halal cert → bank info → photos → pending)
-- /restaurant/dashboard (pending approval OR actual dashboard)
-- /restaurant/menu page (CRUD menu items, toggle availability)
-- react-hook-form + zod validation with Uzbek error messages
+### Session goal: Restaurant onboarding + Customer discovery + Cart + Checkout
+
+#### Completed ✅:
+
+**Prompt 5 — Restaurant onboarding + menu management:**
+- [x] `src/middleware.ts` — restored auth middleware (re-exports from proxy.ts)
+- [x] `src/store/cart.ts` — Zustand cart store with localStorage persistence; one cart per restaurant, prompts clear if switching
+- [x] `src/hooks/useCurrentUser.ts` — hook to get Supabase auth user mapped to `users` table row
+- [x] `src/app/(app)/role-picker/page.tsx` — first-login role picker (customer vs restaurant owner), saves to `users.role` + localStorage flag
+- [x] `src/app/(restaurant)/layout.tsx` — restaurant shell: header "Restoran Panel" + bottom nav (Panel / Menyu / Buyurtmalar / Profil)
+- [x] `src/app/(restaurant)/onboarding/page.tsx` — 5-step onboarding with progress bar:
+  - Step 1: Basic info (name UZ+EN, description, hours, phone)
+  - Step 2: Location — Nominatim geocoding + draggable Leaflet pin
+  - Step 3: Halal certificate upload → Supabase Storage `certificates` bucket
+  - Step 4: Korean bank info (KB국민, 신한, 하나, 우리, 농협, 카카오뱅크, 토스뱅크, etc.)
+  - Step 5: Restaurant photos (up to 5) → Supabase Storage `restaurants` bucket
+  - Step 6: Success screen → redirect to dashboard
+- [x] `src/components/map/LocationPicker.tsx` — Leaflet map (dynamic import, no SSR), draggable pin + click-to-place
+- [x] `src/app/(restaurant)/dashboard/page.tsx` — real dashboard: no-restaurant → onboarding CTA; pending approval → amber notice; approved → stats card + quick action buttons + recent orders
+- [x] `src/app/(restaurant)/orders/page.tsx` — order inbox with state-aware action buttons: confirm payment → start cooking → ready → delivered; cancel with confirm dialog
+- [x] `src/app/(restaurant)/menu/page.tsx` — menu list grouped by category; toggle `is_available` (green/grey chip); toggle `sold_out_today` (red chip); delete item
+- [x] `src/app/(restaurant)/menu/add/page.tsx` — add item form: name UZ+EN, category dropdown, price, photo upload → Supabase Storage `menu` bucket
+- [x] `src/app/(restaurant)/profile/page.tsx` — profile with sign-out
+- [x] `src/app/api/restaurant/route.ts` — POST: create or update restaurant row (upsert), sets `users.role = restaurant` on create
+- [x] `src/app/api/restaurant/menu/route.ts` — POST: create menu item
+- [x] `src/app/api/restaurant/menu/[id]/route.ts` — PATCH: update menu item; DELETE: remove menu item
+
+**Prompt 6 — Customer discovery:**
+- [x] `src/app/(app)/menu/page.tsx` — updated: browser geolocation with 8s timeout + Seoul fallback; calls `restaurants_near()` RPC (30 km radius); text search filter; list/map toggle; role-picker redirect for new users (localStorage flag); restaurant-owner redirect to `/restaurant/dashboard`
+- [x] `src/components/restaurant/RestaurantCard.tsx` — card with photo, name, distance (m/km), open/closed badge, description, address
+- [x] `src/components/map/RestaurantMap.tsx` — Leaflet map (dynamic import): orange dot for user location, restaurant markers with popup + "Menyuni ko'rish" link
+- [x] `src/app/(app)/menu/[restaurantId]/page.tsx` — restaurant menu detail: sticky back-header with open/close status; search bar; category chips (Hammasi / Tovuq / Kabob / Somsa / Osh / Salat / Ichimlik / Shirinlik); sold-out grey overlay; cross-restaurant cart clear prompt; floating cart button when items added
+- [x] `src/components/restaurant/MenuItemCard.tsx` — card with photo, name EN/UZ, description, price, +button; sold-out / unavailable states
+
+**Prompt 7 — Cart + bank-transfer checkout:**
+- [x] `src/app/(app)/cart/page.tsx` — real cart: item cards with +/− qty and × remove, subtotals, total, checkout CTA; empty state with "Menyuga qaytish"
+- [x] `src/app/(app)/checkout/page.tsx` — checkout: order summary; pickup/delivery radio; optional delivery address + note; bank info panel (bank name, account number + **copy** button, exact amount + **copy** button, Uz+En instructions); optional receipt screenshot upload → Supabase Storage `receipts` bucket; "Yubordim / I have sent" button → POST `/api/orders`
+- [x] `src/app/api/orders/route.ts` — POST: validates input (Zod), creates `orders` row (status = `pending_payment`) + `order_items` rows; rolls back order if items insert fails
+- [x] `src/app/(app)/orders/[id]/page.tsx` — order tracking: 6-step status stepper (pending_payment → payment_claimed → payment_confirmed → preparing → ready → delivered); restaurant phone + call button; bank info shown while pending; order items breakdown; 10s status polling
+- [x] `src/app/(app)/orders/page.tsx` — real orders list from DB with status badges, restaurant name, date, total; links to detail page
+- [x] `src/components/layout/BottomNav.tsx` — cart icon now shows live item count badge (from Zustand store)
+
+#### Manual Supabase steps needed:
+1. Create storage buckets in Supabase Dashboard → Storage:
+   - `certificates` (private)
+   - `restaurants` (public) — allow authenticated users to upload
+   - `menu` (public) — allow authenticated users to upload
+   - `receipts` (private) — allow authenticated users to upload
+2. Add storage RLS policies for `restaurants` and `menu` buckets:
+   ```sql
+   CREATE POLICY "auth upload" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'restaurants');
+   CREATE POLICY "auth upload" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'menu');
+   ```
+3. Verify PostGIS `restaurants_near()` function exists (from 0001_init.sql)
+4. Test: flip `is_approved = true` on a restaurant row to test dashboard activation
+
+---
+
+## Next session: Start from Prompt 8 (Real-time order flow)
