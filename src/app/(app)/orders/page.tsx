@@ -4,28 +4,19 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useLanguage } from "@/context/LanguageContext";
 import type { Database } from "@/types/database";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
-const STATUS_LABELS: Record<string, string> = {
-  pending_payment: "To'lov kutilmoqda",
-  payment_claimed: "To'lov da'vo qilindi",
-  payment_confirmed: "To'lov tasdiqlandi",
-  preparing: "Tayyorlanmoqda",
-  ready: "Tayyor!",
-  delivered: "Yetkazildi",
-  cancelled: "Bekor qilindi",
-};
-
 const STATUS_COLORS: Record<string, string> = {
-  pending_payment: "bg-yellow-100 text-yellow-700",
-  payment_claimed: "bg-blue-100 text-blue-700",
+  pending_payment:   "bg-yellow-100 text-yellow-700",
+  payment_claimed:   "bg-blue-100 text-blue-700",
   payment_confirmed: "bg-green-100 text-green-700",
-  preparing: "bg-orange-100 text-orange-700",
-  ready: "bg-primary/10 text-primary",
-  delivered: "bg-gray-100 text-gray-500",
-  cancelled: "bg-red-100 text-red-700",
+  preparing:         "bg-orange-100 text-orange-700",
+  ready:             "bg-primary/10 text-primary",
+  delivered:         "bg-gray-100 text-gray-500",
+  cancelled:         "bg-red-100 text-red-700",
 };
 
 interface OrderWithRestaurant extends Order {
@@ -34,13 +25,15 @@ interface OrderWithRestaurant extends Order {
 
 export default function OrdersPage() {
   const { user } = useCurrentUser();
+  const { t } = useLanguage();
   const [orders, setOrders] = useState<OrderWithRestaurant[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
+    const supabase = createClient();
+
     async function load() {
-      const supabase = createClient();
       const { data } = await supabase
         .from("orders")
         .select(`*, restaurants(name_uz)`)
@@ -51,12 +44,38 @@ export default function OrdersPage() {
       setLoading(false);
     }
     load();
+
+    const channel = supabase
+      .channel(`customer-orders-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "orders",
+          filter: `customer_id=eq.${user.id}`,
+        },
+        (payload) => {
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === (payload.new as Order).id
+                ? { ...o, status: (payload.new as Order).status }
+                : o
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Yuklanmoqda...</p>
+        <p className="text-muted-foreground">{t("common.loading")}</p>
       </div>
     );
   }
@@ -65,15 +84,13 @@ export default function OrdersPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
         <span className="text-7xl mb-4">📋</span>
-        <h2 className="text-xl font-bold">Buyurtmalar yo'q</h2>
-        <p className="text-muted-foreground mt-2">
-          Hali birorta buyurtma bermagansiz
-        </p>
+        <h2 className="text-xl font-bold">{t("orders.empty")}</h2>
+        <p className="text-muted-foreground mt-2">{t("orders.emptyMsg")}</p>
         <Link
           href="/menu"
           className="mt-6 h-12 px-8 bg-primary text-white rounded-xl flex items-center font-semibold"
         >
-          Menyuga qaytish
+          {t("orders.browseRestaurants")}
         </Link>
       </div>
     );
@@ -81,7 +98,7 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-3">
-      <h1 className="text-xl font-bold">Buyurtmalarim</h1>
+      <h1 className="text-xl font-bold">{t("orders.title")}</h1>
       {orders.map((order) => (
         <Link
           key={order.id}
@@ -90,9 +107,7 @@ export default function OrdersPage() {
         >
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="font-bold">
-                #{order.id.slice(-6).toUpperCase()}
-              </p>
+              <p className="font-bold">#{order.id.slice(-6).toUpperCase()}</p>
               <p className="text-sm text-muted-foreground">
                 {order.restaurants?.name_uz}
               </p>
@@ -102,12 +117,12 @@ export default function OrdersPage() {
                 STATUS_COLORS[order.status] ?? "bg-gray-100 text-gray-600"
               }`}
             >
-              {STATUS_LABELS[order.status] ?? order.status}
+              {t(`orders.status.${order.status}`) || order.status}
             </span>
           </div>
           <div className="flex items-center justify-between mt-2">
             <span className="text-xs text-muted-foreground">
-              {new Date(order.created_at).toLocaleString("uz-UZ", {
+              {new Date(order.created_at).toLocaleString("ko-KR", {
                 month: "short",
                 day: "numeric",
                 hour: "2-digit",

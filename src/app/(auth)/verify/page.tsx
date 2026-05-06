@@ -9,6 +9,8 @@ export default function VerifyPage() {
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const [phone, setPhone] = useState("");
   const [deepLink, setDeepLink] = useState("");
+  const [deliveryMethod, setDeliveryMethod] = useState<"telegram" | "sms">("telegram");
+  const [devCode, setDevCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [resendTimer, setResendTimer] = useState(60);
@@ -17,12 +19,15 @@ export default function VerifyPage() {
   useEffect(() => {
     const storedPhone = sessionStorage.getItem("auth_phone");
     const storedLink = sessionStorage.getItem("auth_deep_link");
+    const storedMethod = sessionStorage.getItem("auth_delivery_method");
     if (!storedPhone) {
       router.replace("/login");
       return;
     }
     setPhone(storedPhone);
     setDeepLink(storedLink || "");
+    setDeliveryMethod((storedMethod as "telegram" | "sms") || "telegram");
+    setDevCode(sessionStorage.getItem("auth_dev_code") || "");
   }, [router]);
 
   // Countdown timer for resend
@@ -68,18 +73,26 @@ export default function VerifyPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Kod noto'g'ri");
+        setError(data.error || "Wrong code");
         setCode(["", "", "", "", "", ""]);
         inputRefs.current[0]?.focus();
         return;
       }
 
-      // Use the magic link to establish Supabase session
-      if (data.sessionLink) {
-        window.location.href = data.sessionLink;
-      } else {
-        router.replace("/menu");
+      // Sign in client-side using the token hash — no redirect needed
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
+      const { error: signInError } = await supabase.auth.verifyOtp({
+        token_hash: data.tokenHash,
+        type: "magiclink",
+      });
+
+      if (signInError) {
+        setError("Login failed. Please try again.");
+        return;
       }
+
+      router.replace("/menu");
     } catch {
       setError("Internet aloqasini tekshiring");
     } finally {
@@ -92,11 +105,20 @@ export default function VerifyPage() {
     setResendTimer(60);
     setError("");
 
-    await fetch("/api/auth/request-otp", {
+    const res = await fetch("/api/auth/request-otp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone }),
     });
+    const data = await res.json();
+    if (data.method) {
+      setDeliveryMethod(data.method);
+      sessionStorage.setItem("auth_delivery_method", data.method);
+      setDeepLink(data.deepLink ?? "");
+      sessionStorage.setItem("auth_deep_link", data.deepLink ?? "");
+      setDevCode(data.devCode ?? "");
+      sessionStorage.setItem("auth_dev_code", data.devCode ?? "");
+    }
   }
 
   return (
@@ -106,23 +128,40 @@ export default function VerifyPage() {
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary mb-4">
             <span className="text-4xl">🔐</span>
           </div>
-          <h1 className="text-2xl font-bold">Kodni kiriting</h1>
+          <h1 className="text-2xl font-bold">Enter verification code</h1>
           <p className="text-muted-foreground mt-2 text-sm">
-            Telegram orqali 6 xonali kod yuborildi
+            {deliveryMethod === "sms"
+              ? "6-digit code sent via SMS"
+              : "Get your 6-digit code from Telegram"}
           </p>
           <p className="font-semibold mt-1">{phone}</p>
         </div>
 
-        {/* Telegram deep-link button */}
-        {deepLink && (
+        {/* Dev mode: show code directly (localhost only, never in production) */}
+        {devCode && (
+          <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4 mb-4 text-center">
+            <p className="text-xs font-semibold text-yellow-700 uppercase mb-1">Dev mode — your code</p>
+            <p className="text-4xl font-mono font-bold tracking-widest text-yellow-800">{devCode}</p>
+          </div>
+        )}
+
+        {/* Telegram deep-link button — only shown when using Telegram */}
+        {deliveryMethod === "telegram" && deepLink && (
           <a
             href={deepLink}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 w-full h-12 rounded-xl bg-[#2AABEE] text-white font-semibold text-base mb-6"
           >
-            <span>✈️</span> Telegramdan kodni olish
+            <span>✈️</span> Open Telegram to get code
           </a>
+        )}
+
+        {/* SMS notice */}
+        {deliveryMethod === "sms" && (
+          <div className="flex items-center gap-2 w-full h-12 rounded-xl bg-green-50 border border-green-200 text-green-800 font-medium text-sm justify-center mb-6">
+            📱 Code sent to {phone}
+          </div>
         )}
 
         {/* 6-digit code inputs */}
@@ -175,10 +214,16 @@ export default function VerifyPage() {
         </div>
 
         <button
-          onClick={() => router.push("/login")}
+          onClick={() => {
+            sessionStorage.removeItem("auth_phone");
+            sessionStorage.removeItem("auth_deep_link");
+            sessionStorage.removeItem("auth_delivery_method");
+            sessionStorage.removeItem("auth_dev_code");
+            router.push("/login");
+          }}
           className="w-full text-center text-sm text-muted-foreground mt-4"
         >
-          ← Orqaga qaytish
+          ← Back
         </button>
       </div>
     </div>

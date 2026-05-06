@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { LanguageProvider } from "@/context/LanguageContext";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -10,8 +11,8 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Oshxona — Mazali halol taomlar",
-  description: "Koreyadagi o'zbek restoranlarini toping. Find Halal Uzbek food near you in Korea.",
-  manifest: "/manifest.json",
+  description:
+    "Koreyadagi o'zbek restoranlarini toping. Find Halal Uzbek food near you in Korea.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -32,9 +33,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="uz" className={`${inter.variable} h-full`}>
+    <html lang="uz" className={`${inter.variable} h-full`} suppressHydrationWarning>
       <body className="min-h-full bg-background text-foreground antialiased">
-        {children}
+        <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>
   );

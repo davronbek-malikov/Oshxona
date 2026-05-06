@@ -15,17 +15,55 @@ const updateSchema = z.object({
   sold_out_today: z.boolean().optional(),
 });
 
+async function getCallerPhone(user: { email?: string | null }): Promise<string | null> {
+  if (!user.email?.endsWith("@oshxona.internal")) return null;
+  return "+" + user.email.replace("@oshxona.internal", "");
+}
+
+async function assertOwnsMenuItem(
+  adminClient: Awaited<ReturnType<typeof createAdminClient>>,
+  menuItemId: string,
+  callerPhone: string
+): Promise<boolean> {
+  // Step 1: get the restaurant_id that owns this menu item
+  const { data: item } = await adminClient
+    .from("menu_items")
+    .select("restaurant_id")
+    .eq("id", menuItemId)
+    .single();
+
+  if (!item) return false;
+
+  // Step 2: verify the caller owns that restaurant
+  const { data: restaurant } = await adminClient
+    .from("restaurants")
+    .select("owner_id")
+    .eq("id", item.restaurant_id)
+    .single();
+
+  if (!restaurant) return false;
+
+  const { data: dbUser } = await adminClient
+    .from("users")
+    .select("id")
+    .eq("phone", callerPhone)
+    .single();
+
+  return dbUser != null && restaurant.owner_id === dbUser.id;
+}
+
 export async function PATCH(
   req: NextRequest,
   ctx: RouteContext<"/api/restaurant/menu/[id]">
 ) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
   }
+
+  const phone = await getCallerPhone(user);
+  if (!phone) return NextResponse.json({ error: "Noto'g'ri sessiya" }, { status: 401 });
 
   const { id } = await ctx.params;
   const body = await req.json();
@@ -35,11 +73,13 @@ export async function PATCH(
   }
 
   const admin = await createAdminClient();
-  const { error } = await admin
-    .from("menu_items")
-    .update(parsed.data)
-    .eq("id", id);
 
+  const owns = await assertOwnsMenuItem(admin, id, phone);
+  if (!owns) {
+    return NextResponse.json({ error: "Ruxsat yo'q" }, { status: 403 });
+  }
+
+  const { error } = await admin.from("menu_items").update(parsed.data).eq("id", id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -52,17 +92,23 @@ export async function DELETE(
   ctx: RouteContext<"/api/restaurant/menu/[id]">
 ) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
   }
 
+  const phone = await getCallerPhone(user);
+  if (!phone) return NextResponse.json({ error: "Noto'g'ri sessiya" }, { status: 401 });
+
   const { id } = await ctx.params;
   const admin = await createAdminClient();
-  const { error } = await admin.from("menu_items").delete().eq("id", id);
 
+  const owns = await assertOwnsMenuItem(admin, id, phone);
+  if (!owns) {
+    return NextResponse.json({ error: "Ruxsat yo'q" }, { status: 403 });
+  }
+
+  const { error } = await admin.from("menu_items").delete().eq("id", id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

@@ -1,3 +1,6 @@
+"use client";
+
+import { useLanguage } from "@/context/LanguageContext";
 import { BottomNav } from "./BottomNav";
 
 interface AppShellProps {
@@ -8,6 +11,8 @@ interface AppShellProps {
 }
 
 export function AppShell({ children, title, subtitle, hideNav = false }: AppShellProps) {
+  const { t } = useLanguage();
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       {/* Header */}
@@ -21,7 +26,7 @@ export function AppShell({ children, title, subtitle, hideNav = false }: AppShel
               {title ?? "Oshxona"}
             </h1>
             <p className="text-xs text-muted-foreground leading-none">
-              {subtitle ?? "Mazali halol taomlar"}
+              {subtitle ?? t("shell.subtitle")}
             </p>
           </div>
         </div>

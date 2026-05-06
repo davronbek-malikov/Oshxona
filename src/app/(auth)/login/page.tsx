@@ -41,9 +41,10 @@ export default function LoginPage() {
         return;
       }
 
-      // Store phone and deep-link for the verify page
       sessionStorage.setItem("auth_phone", fullPhone);
-      sessionStorage.setItem("auth_deep_link", data.deepLink);
+      sessionStorage.setItem("auth_delivery_method", data.method);
+      sessionStorage.setItem("auth_deep_link", data.deepLink ?? "");
+      sessionStorage.setItem("auth_dev_code", data.devCode ?? "");
 
       router.push("/verify");
     } catch {
@@ -115,9 +116,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-sm text-muted-foreground mt-8">
-          Tasdiqlash kodi Telegram orqali yuboriladi.
-          <br />
-          The code will be sent via Telegram.
+          A verification code will be sent to confirm your number.
         </p>
       </div>
     </div>

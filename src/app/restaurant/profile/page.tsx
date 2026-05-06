@@ -28,18 +28,34 @@ export default function RestaurantProfilePage() {
 
       <div className="bg-white rounded-2xl divide-y divide-border">
         <Link
-          href="/restaurant/onboarding"
-          className="flex items-center gap-3 px-5 py-4 text-base"
+          href="/restaurant/settings"
+          className="flex items-center justify-between px-5 py-4 text-base"
         >
-          <span>📝</span>
-          <span>Restoran ma'lumotlarini tahrirlash</span>
+          <div className="flex items-center gap-3">
+            <span>⚙️</span>
+            <span>Restaurant settings</span>
+          </div>
+          <span className="text-muted-foreground">→</span>
+        </Link>
+        <Link
+          href="/restaurant/onboarding"
+          className="flex items-center justify-between px-5 py-4 text-base"
+        >
+          <div className="flex items-center gap-3">
+            <span>📝</span>
+            <span>Full re-onboarding</span>
+          </div>
+          <span className="text-muted-foreground">→</span>
         </Link>
         <Link
           href="/menu"
-          className="flex items-center gap-3 px-5 py-4 text-base"
+          className="flex items-center justify-between px-5 py-4 text-base"
         >
-          <span>👤</span>
-          <span>Mijoz sifatida ko'rish</span>
+          <div className="flex items-center gap-3">
+            <span>👤</span>
+            <span>View as customer</span>
+          </div>
+          <span className="text-muted-foreground">→</span>
         </Link>
       </div>
 

@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { RestaurantCard } from "@/components/restaurant/RestaurantCard";
+import { AISearchButton } from "@/components/ai/AISearchButton";
+import { useLanguage } from "@/context/LanguageContext";
 
 const RestaurantMap = dynamic(
   () => import("@/components/map/RestaurantMap"),
@@ -37,6 +39,7 @@ const DEFAULT_LNG = 126.978;
 export default function MenuPage() {
   const router = useRouter();
   const { user, loading: userLoading } = useCurrentUser();
+  const { t } = useLanguage();
   const [restaurants, setRestaurants] = useState<NearbyRestaurant[]>([]);
   const [lat, setLat] = useState(DEFAULT_LAT);
   const [lng, setLng] = useState(DEFAULT_LNG);
@@ -81,13 +84,33 @@ export default function MenuPage() {
   async function loadRestaurants(userLat: number, userLng: number) {
     setFetching(true);
     const supabase = createClient();
+
     const { data, error } = await supabase.rpc("restaurants_near", {
       lat: userLat,
       lng: userLng,
-      radius_km: 30,
+      radius_km: 500,
     });
-    if (!error && data) {
+
+    if (!error && data && (data as NearbyRestaurant[]).length > 0) {
       setRestaurants(data as NearbyRestaurant[]);
+      setFetching(false);
+      return;
+    }
+
+    // Fallback: show all approved + active restaurants
+    const { data: all } = await supabase
+      .from("restaurants")
+      .select(
+        "id, name_uz, name_en, description, address, phone, photos, opening_time, closing_time, bank_name, bank_account_number, bank_account_holder"
+      )
+      .eq("is_approved", true)
+      .eq("is_active", true)
+      .order("name_uz");
+
+    if (all) {
+      setRestaurants(
+        (all as NearbyRestaurant[]).map((r) => ({ ...r, distance_km: 0 }))
+      );
     }
     setFetching(false);
   }
@@ -106,10 +129,7 @@ export default function MenuPage() {
       {/* Location denied banner */}
       {locationDenied && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
-          📍 Joylashuvga ruxsat bering — aniqroq natijalar uchun.
-          <span className="text-xs block text-amber-600 mt-0.5">
-            Please enable location for better results.
-          </span>
+          {t("menu.locationDenied")}
         </div>
       )}
 
@@ -122,7 +142,7 @@ export default function MenuPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Restoran qidirish... / Search restaurants"
+          placeholder={t("menu.searchPlaceholder")}
           className="w-full h-12 pl-11 pr-4 rounded-2xl border border-input bg-white text-base focus:outline-none focus:ring-2 focus:ring-ring"
         />
       </div>
@@ -137,7 +157,7 @@ export default function MenuPage() {
               : "text-muted-foreground"
           }`}
         >
-          📋 Ro'yxat
+          📋 {t("menu.listView")}
         </button>
         <button
           onClick={() => setView("map")}
@@ -147,16 +167,14 @@ export default function MenuPage() {
               : "text-muted-foreground"
           }`}
         >
-          🗺️ Xarita
+          🗺️ {t("menu.mapView")}
         </button>
       </div>
 
       {/* Loading */}
       {fetching && (
         <div className="text-center py-12">
-          <p className="text-muted-foreground">
-            Yaqin restoranlar qidirilmoqda...
-          </p>
+          <p className="text-muted-foreground">{t("menu.searching")}</p>
         </div>
       )}
 
@@ -164,11 +182,9 @@ export default function MenuPage() {
       {!fetching && filtered.length === 0 && (
         <div className="bg-white rounded-2xl p-10 text-center">
           <span className="text-5xl">🍽️</span>
-          <p className="font-semibold mt-3">Restoran topilmadi</p>
+          <p className="font-semibold mt-3">{t("menu.notFound")}</p>
           <p className="text-muted-foreground text-sm mt-1">
-            {search
-              ? "Boshqa so'z bilan urinib ko'ring"
-              : "Hozircha yaqin atrofda restoran yo'q"}
+            {search ? t("menu.tryAnother") : t("menu.noNearby")}
           </p>
         </div>
       )}
@@ -214,9 +230,21 @@ export default function MenuPage() {
             href="/role-picker"
             className="text-sm text-muted-foreground underline"
           >
-            Restoran egasimisiz? →
+            {t("menu.ownerLink")}
           </Link>
         </div>
+      )}
+
+      {/* AI Search floating button */}
+      {!fetching && (
+        <AISearchButton
+          restaurants={restaurants.map((r) => ({
+            id: r.id,
+            name_uz: r.name_uz,
+            name_en: r.name_en,
+            description: r.description,
+          }))}
+        />
       )}
     </div>
   );

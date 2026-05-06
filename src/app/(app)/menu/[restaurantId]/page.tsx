@@ -6,6 +6,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useCartStore } from "@/store/cart";
 import { MenuItemCard } from "@/components/restaurant/MenuItemCard";
+import { AISearchButton } from "@/components/ai/AISearchButton";
+import { useLanguage } from "@/context/LanguageContext";
 import type { Database } from "@/types/database";
 
 type Restaurant = Database["public"]["Tables"]["restaurants"]["Row"];
@@ -33,6 +35,7 @@ function isOpen(opening: string | null | undefined, closing: string | null | und
 export default function RestaurantMenuPage() {
   const params = useParams<{ restaurantId: string }>();
   const router = useRouter();
+  const { t } = useLanguage();
   const restaurantId = params.restaurantId;
 
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
@@ -46,8 +49,9 @@ export default function RestaurantMenuPage() {
   const { addItem, clearCart, itemCount, restaurantId: cartRestaurantId } = useCartStore();
 
   useEffect(() => {
+    const supabase = createClient();
+
     async function load() {
-      const supabase = createClient();
       const { data: r } = await supabase
         .from("restaurants")
         .select("*")
@@ -65,6 +69,33 @@ export default function RestaurantMenuPage() {
       setLoading(false);
     }
     load();
+
+    // Realtime: reflect availability changes instantly (sold-out, hidden)
+    const channel = supabase
+      .channel(`menu-availability-${restaurantId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "menu_items",
+          filter: `restaurant_id=eq.${restaurantId}`,
+        },
+        (payload) => {
+          setItems((prev) =>
+            prev.map((item) =>
+              item.id === (payload.new as MenuItem).id
+                ? { ...item, ...(payload.new as MenuItem) }
+                : item
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [restaurantId]);
 
   function handleAdd(item: MenuItem) {
@@ -113,7 +144,7 @@ export default function RestaurantMenuPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Yuklanmoqda...</p>
+        <p className="text-muted-foreground">{t("common.loading")}</p>
       </div>
     );
   }
@@ -121,9 +152,9 @@ export default function RestaurantMenuPage() {
   if (!restaurant) {
     return (
       <div className="text-center py-16">
-        <p className="text-muted-foreground">Restoran topilmadi.</p>
+        <p className="text-muted-foreground">{t("menu.notFound")}</p>
         <Link href="/menu" className="text-primary underline mt-2 block">
-          ← Orqaga
+          ← {t("common.back")}
         </Link>
       </div>
     );
@@ -149,12 +180,10 @@ export default function RestaurantMenuPage() {
         {open !== null && (
           <span
             className={`text-xs font-semibold px-3 py-1 rounded-full flex-shrink-0 ${
-              open
-                ? "bg-green-100 text-green-700"
-                : "bg-gray-100 text-gray-600"
+              open ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
             }`}
           >
-            {open ? "Ochiq" : "Yopiq"}
+            {open ? t("restaurant.open") : t("restaurant.closed")}
           </span>
         )}
       </div>
@@ -168,7 +197,7 @@ export default function RestaurantMenuPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Taom qidirish..."
+          placeholder={t("common.search") + "..."}
           className="w-full h-11 pl-11 pr-4 rounded-2xl border border-input bg-white text-base focus:outline-none focus:ring-2 focus:ring-ring"
         />
       </div>
@@ -185,7 +214,7 @@ export default function RestaurantMenuPage() {
                 : "bg-white border border-border text-muted-foreground"
             }`}
           >
-            {cat.label}
+            {cat.value === "all" ? t("restaurant.allCategories") : cat.label}
           </button>
         ))}
       </div>
@@ -194,7 +223,7 @@ export default function RestaurantMenuPage() {
       {visible.length === 0 && (
         <div className="bg-white rounded-2xl p-8 text-center">
           <span className="text-4xl">🍽️</span>
-          <p className="text-muted-foreground mt-3">Taom topilmadi</p>
+          <p className="text-muted-foreground mt-3">{t("menu.notFound")}</p>
         </div>
       )}
       <div className="space-y-3">
@@ -207,23 +236,22 @@ export default function RestaurantMenuPage() {
       {showClearPrompt && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">
           <div className="bg-white rounded-t-3xl p-6 w-full max-w-[640px] space-y-4">
-            <h3 className="font-bold text-lg">Savatni tozalash kerak</h3>
+            <h3 className="font-bold text-lg">{t("restaurant.clearCartTitle")}</h3>
             <p className="text-muted-foreground text-sm">
-              Savatchada boshqa restoran mahsulotlari bor. Yangi restorandan
-              qo'shish uchun savatni tozalaysizmi?
+              {t("restaurant.clearCartMsg")}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowClearPrompt(false)}
                 className="flex-1 h-12 border border-border rounded-xl font-semibold"
               >
-                Bekor
+                {t("common.cancel")}
               </button>
               <button
                 onClick={confirmClearCart}
                 className="flex-1 h-12 bg-primary text-white rounded-xl font-semibold"
               >
-                Ha, tozalash
+                {t("restaurant.clearAndAdd")}
               </button>
             </div>
           </div>
@@ -241,13 +269,30 @@ export default function RestaurantMenuPage() {
               <span className="bg-white/20 rounded-lg w-8 h-8 flex items-center justify-center font-bold text-sm">
                 {itemCount()}
               </span>
-              <span className="font-bold">Savatga o'tish</span>
+              <span className="font-bold">{t("cart.checkout")}</span>
               <span className="font-bold">
                 ₩{useCartStore.getState().total().toLocaleString()}
               </span>
             </Link>
           </div>
         </div>
+      )}
+
+      {/* AI Search floating button */}
+      {!loading && items.length > 0 && (
+        <AISearchButton
+          menuContext={{
+            restaurantId: restaurant.id,
+            restaurantName: restaurant.name_uz,
+            items: items.map((i) => ({
+              id: i.id,
+              name_uz: i.name_uz,
+              name_en: i.name_en,
+              category: i.category,
+              price_krw: i.price_krw,
+            })),
+          }}
+        />
       )}
     </div>
   );

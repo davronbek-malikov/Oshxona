@@ -49,7 +49,8 @@ export default function AddMenuItemPage() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<FormData>({ resolver: zodResolver(schema) });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } = useForm<FormData>({ resolver: zodResolver(schema) as any });
 
   async function uploadPhoto(file: File): Promise<string | null> {
     const supabase = createClient();

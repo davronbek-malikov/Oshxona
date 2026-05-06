@@ -14,6 +14,7 @@ export default function RestaurantDashboardPage() {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [fetching, setFetching] = useState(true);
+  const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -109,6 +110,19 @@ export default function RestaurantDashboardPage() {
     );
   }
 
+  async function toggleActive() {
+    if (!restaurant) return;
+    setToggling(true);
+    const supabase = createClient();
+    const newValue = !restaurant.is_active;
+    await supabase
+      .from("restaurants")
+      .update({ is_active: newValue })
+      .eq("id", restaurant.id);
+    setRestaurant((prev) => prev ? { ...prev, is_active: newValue } : prev);
+    setToggling(false);
+  }
+
   // Approved dashboard
   const pendingCount = orders.filter(
     (o) => o.status === "pending_payment" || o.status === "payment_claimed"
@@ -125,15 +139,32 @@ export default function RestaurantDashboardPage() {
     <div className="space-y-4">
       {/* Restaurant card */}
       <div className="bg-primary rounded-2xl p-5 text-white">
-        <div className="flex items-center gap-3">
-          <span className="text-4xl">🏪</span>
-          <div>
-            <h2 className="text-xl font-bold">{restaurant.name_uz}</h2>
-            <p className="text-primary-foreground/80 text-sm">
-              {restaurant.address}
-            </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-4xl">🏪</span>
+            <div>
+              <h2 className="text-xl font-bold">{restaurant.name_uz}</h2>
+              <p className="text-primary-foreground/80 text-sm">
+                {restaurant.address}
+              </p>
+            </div>
           </div>
+
+          {/* Open / Closed toggle */}
+          <button
+            onClick={toggleActive}
+            disabled={toggling}
+            className={`flex-shrink-0 flex items-center gap-2 px-4 h-10 rounded-xl font-semibold text-sm transition-colors disabled:opacity-60 ${
+              restaurant.is_active
+                ? "bg-green-400/30 text-white border border-green-300"
+                : "bg-white/20 text-white/70 border border-white/30"
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${restaurant.is_active ? "bg-green-300" : "bg-white/50"}`} />
+            {restaurant.is_active ? "Open" : "Closed"}
+          </button>
         </div>
+
         <div className="flex gap-4 mt-4">
           <div className="text-center">
             <p className="text-2xl font-bold">{pendingCount}</p>

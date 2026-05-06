@@ -21,6 +21,15 @@ async function sendTelegramMessage(chatId: number, text: string) {
 }
 
 export async function POST(req: NextRequest) {
+  // Verify the request is genuinely from Telegram
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (secret) {
+    const headerSecret = req.headers.get("x-telegram-bot-api-secret-token");
+    if (headerSecret !== secret) {
+      return NextResponse.json({ ok: false }, { status: 403 });
+    }
+  }
+
   const body: TelegramUpdate = await req.json();
   const msg = body.message;
 
@@ -28,7 +37,6 @@ export async function POST(req: NextRequest) {
 
   const text = msg.text.trim();
   const chatId = msg.chat.id;
-  const telegramUserId = msg.from.id;
 
   // Handle /start <phone> deep-link
   if (text.startsWith("/start")) {
@@ -44,7 +52,6 @@ export async function POST(req: NextRequest) {
 
     const supabase = await createAdminClient();
 
-    // Find the most recent unused, unexpired OTP for this phone
     const { data: otp } = await supabase
       .from("phone_otps")
       .select("id, code")
@@ -64,7 +71,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Mark delivered and store telegram_user_id association
     await supabase
       .from("phone_otps")
       .update({ delivered: true })
@@ -78,12 +84,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // Default response for other messages
-  await sendTelegramMessage(
-    chatId,
-    "Salom! Oshxona ilovasidan foydalaning."
-  );
-
+  await sendTelegramMessage(chatId, "Salom! Oshxona ilovasidan foydalaning.");
   return NextResponse.json({ ok: true });
 }
 
