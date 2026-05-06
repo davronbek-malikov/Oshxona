@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { z } from "zod";
 import type { Database } from "@/types/database";
+import { sendOrderStatusPush } from "@/lib/push";
 
 type OrderStatus = Database["public"]["Tables"]["orders"]["Row"]["status"];
 
@@ -53,7 +54,7 @@ export async function PATCH(
   // Fetch the order and its restaurant
   const { data: order } = await admin
     .from("orders")
-    .select("status, restaurant_id")
+    .select("status, restaurant_id, customer_id")
     .eq("id", id)
     .single();
 
@@ -101,6 +102,28 @@ export async function PATCH(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Send Web Push to customer (fire-and-forget — don't block the response)
+  Promise.resolve().then(async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const adminAny = admin as any;
+      const [restaurantData, subsData] = await Promise.all([
+        admin.from("restaurants").select("name_uz").eq("id", order.restaurant_id!).single(),
+        adminAny.from("push_subscriptions").select("endpoint, p256dh, auth").eq("user_id", order.customer_id!),
+      ]);
+      if (subsData.data && subsData.data.length > 0) {
+        await sendOrderStatusPush(
+          subsData.data,
+          id,
+          restaurantData.data?.name_uz ?? "Restoran",
+          newStatus
+        );
+      }
+    } catch {
+      // Ignore push errors — they must not affect the main response
+    }
+  });
 
   return NextResponse.json({ success: true, status: newStatus });
 }

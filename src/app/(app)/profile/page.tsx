@@ -7,11 +7,14 @@ import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useLanguage, type Locale } from "@/context/LanguageContext";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, loading } = useCurrentUser();
   const { t, lang, setLang } = useLanguage();
+  const { state: pushState, subscribe, unsubscribe } = usePushNotifications();
+  const [pushLoading, setPushLoading] = useState(false);
   const [name, setName] = useState("");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -118,6 +121,51 @@ export default function ProfilePage() {
           ))}
         </div>
       </div>
+
+      {/* Push notification toggle */}
+      {pushState !== "unsupported" && (
+        <div className="bg-white rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold">🔔 Bildirishnomalar</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {pushState === "granted"
+                  ? "Buyurtma yangilanishlari yoqilgan"
+                  : pushState === "denied"
+                  ? "Brauzer bloklagan — sozlamalardan yoqing"
+                  : "Buyurtma holati haqida xabar oling"}
+              </p>
+            </div>
+
+            {pushState === "denied" ? (
+              <span className="text-xs text-destructive font-medium">Bloklangan</span>
+            ) : (
+              <button
+                onClick={async () => {
+                  setPushLoading(true);
+                  if (pushState === "granted") {
+                    await unsubscribe();
+                  } else {
+                    await subscribe();
+                  }
+                  setPushLoading(false);
+                }}
+                disabled={pushLoading || pushState === "loading"}
+                className={`relative w-12 h-7 rounded-full transition-colors duration-200 flex-shrink-0 ${
+                  pushState === "granted" ? "bg-primary" : "bg-gray-200"
+                } disabled:opacity-50`}
+                aria-label="Push bildirishnomalarini yoqish/o'chirish"
+              >
+                <span
+                  className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                    pushState === "granted" ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Navigation shortcuts */}
       <div className="bg-white rounded-2xl divide-y divide-border">

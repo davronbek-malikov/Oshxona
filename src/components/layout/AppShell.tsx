@@ -2,6 +2,7 @@
 
 import { useLanguage } from "@/context/LanguageContext";
 import { BottomNav } from "./BottomNav";
+import { OrderStatusToast } from "@/components/orders/OrderStatusToast";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -39,6 +40,9 @@ export function AppShell({ children, title, subtitle, hideNav = false }: AppShel
 
       {/* Bottom navigation */}
       {!hideNav && <BottomNav />}
+
+      {/* Global order status toast — appears above bottom nav on any status change */}
+      <OrderStatusToast />
     </div>
   );
 }
