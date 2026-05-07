@@ -13,10 +13,10 @@ export function BottomNav() {
   const { t } = useLanguage();
 
   const NAV_ITEMS = [
-    { href: "/menu", icon: UtensilsCrossed, label: t("nav.menu") },
-    { href: "/cart", icon: ShoppingCart, label: t("nav.cart"), badge: true },
-    { href: "/orders", icon: ClipboardList, label: t("nav.orders") },
-    { href: "/profile", icon: User, label: t("nav.profile") },
+    { href: "/menu",    icon: UtensilsCrossed, label: t("nav.menu") },
+    { href: "/cart",    icon: ShoppingCart,    label: t("nav.cart"),    badge: true },
+    { href: "/orders",  icon: ClipboardList,   label: t("nav.orders") },
+    { href: "/profile", icon: User,            label: t("nav.profile") },
   ] as const;
 
   return (
@@ -30,20 +30,25 @@ export function BottomNav() {
               key={href}
               href={href}
               className={cn(
-                "flex-1 flex flex-col items-center justify-center py-3 gap-1",
+                "flex-1 flex flex-col items-center justify-center py-2.5 gap-1",
                 "min-h-[64px] transition-colors relative",
                 active ? "text-primary" : "text-muted-foreground"
               )}
             >
               <div className="relative">
-                <Icon size={24} strokeWidth={active ? 2.5 : 1.8} />
+                <Icon size={26} strokeWidth={active ? 2.5 : 1.8} />
                 {showBadge && (
-                  <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                  <span className="absolute -top-1.5 -right-2.5 min-w-[20px] h-[20px] bg-primary text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1">
                     {cartCount}
                   </span>
                 )}
               </div>
-              <span className={cn("text-xs font-medium")}>{label}</span>
+              <span className={cn(
+                "text-sm font-semibold",
+                active ? "text-primary" : "text-muted-foreground"
+              )}>
+                {label}
+              </span>
             </Link>
           );
         })}

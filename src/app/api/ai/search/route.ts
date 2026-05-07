@@ -29,23 +29,24 @@ interface SearchRequest {
   context: RestaurantContext | MenuContext;
 }
 
-interface MatchItem {
-  id: string;
-  name: string;
-  price: number;
+interface MatchItem { id: string; name: string; price: number }
+interface Match { restaurantId: string; restaurantName: string; items: MatchItem[] }
+interface SearchResponse { reply: string; matches: Match[] }
+
+// ─── Detect which provider to use ─────────────────────────────────────────────
+type Provider = "groq" | "gemini";
+
+function detectProvider(): { provider: Provider; apiKey: string } | null {
+  if (process.env.GROQ_API_KEY) {
+    return { provider: "groq", apiKey: process.env.GROQ_API_KEY };
+  }
+  if (process.env.GOOGLE_GEMINI_API_KEY) {
+    return { provider: "gemini", apiKey: process.env.GOOGLE_GEMINI_API_KEY };
+  }
+  return null;
 }
 
-interface Match {
-  restaurantId: string;
-  restaurantName: string;
-  items: MatchItem[];
-}
-
-interface SearchResponse {
-  reply: string;
-  matches: Match[];
-}
-
+// ─── Shared system prompt ──────────────────────────────────────────────────────
 function buildPrompt(query: string, ctx: RestaurantContext | MenuContext): string {
   const ctxJson =
     ctx.type === "restaurants"
@@ -68,36 +69,81 @@ function buildPrompt(query: string, ctx: RestaurantContext | MenuContext): strin
         );
 
   return `You are a food assistant for Oshxona, a halal Uzbek food app in South Korea.
-The user's query may be in Uzbek, Korean, English, or Russian.
-Find the best matching ${ctx.type === "restaurants" ? "restaurants" : "menu items"} from the available list.
+The user query may be in Uzbek, Korean, English, or Russian.
+Find the best matching ${ctx.type === "restaurants" ? "restaurants" : "menu items"}.
 
 User query: "${query}"
 
 Available ${ctx.type === "restaurants" ? "restaurants" : "menu items"}:
 ${ctxJson}
 
-Respond ONLY with valid JSON (no markdown, no code blocks) in this exact format:
+Respond ONLY with valid JSON (no markdown, no code blocks):
 {
-  "reply": "A short friendly response in the SAME language as the user's query (max 1 sentence)",
+  "reply": "Short friendly response in the SAME language as the query (max 1 sentence)",
   "matches": [
     {
-      "restaurantId": "uuid here",
-      "restaurantName": "restaurant name here",
-      "items": [
-        { "id": "uuid", "name": "item name", "price": 12000 }
-      ]
+      "restaurantId": "uuid",
+      "restaurantName": "name",
+      "items": [{ "id": "uuid", "name": "item name", "price": 12000 }]
     }
   ]
 }
-
-Rules:
-- For restaurant search: each match has restaurantId, restaurantName, and items: []
-- For menu search: each match has restaurantId, restaurantName, and the matching menu items
-- If nothing matches, return { "reply": "...", "matches": [] }
-- Return at most 3 matches
-- Understand food keywords in all 4 languages (e.g. "kabob", "케밥", "кабоб", "chicken")`;
+Rules: max 3 matches. If nothing found return {"reply":"...","matches":[]}.
+Understand food in Uzbek/Korean/English/Russian (kabob=케밥=кабоб, osh=плов=밥).`;
 }
 
+// ─── Groq (OpenAI-compatible, free) ───────────────────────────────────────────
+async function callGroq(prompt: string, apiKey: string): Promise<string> {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      max_tokens: 1024,
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("Groq error:", err);
+    throw new Error(`Groq API error ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? "";
+}
+
+// ─── Google Gemini ─────────────────────────────────────────────────────────────
+async function callGemini(prompt: string, apiKey: string): Promise<string> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("Gemini error:", err);
+    throw new Error(`Gemini API error ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+}
+
+// ─── Route handler ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -105,9 +151,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
   }
 
-  const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "AI search not configured" }, { status: 503 });
+  const providerConfig = detectProvider();
+  if (!providerConfig) {
+    return NextResponse.json(
+      { error: "AI search not configured. Add GROQ_API_KEY or GOOGLE_GEMINI_API_KEY to .env.local" },
+      { status: 503 }
+    );
   }
 
   let body: SearchRequest;
@@ -125,42 +174,23 @@ export async function POST(req: NextRequest) {
   const prompt = buildPrompt(query.trim(), context);
 
   try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 1024,
-          },
-        }),
-      }
-    );
+    const { provider, apiKey } = providerConfig;
+    const rawText =
+      provider === "groq"
+        ? await callGroq(prompt, apiKey)
+        : await callGemini(prompt, apiKey);
 
-    if (!geminiRes.ok) {
-      const err = await geminiRes.text();
-      console.error("Gemini error:", err);
-      return NextResponse.json({ error: "AI service error" }, { status: 502 });
-    }
-
-    const geminiData = await geminiRes.json();
-    const rawText: string =
-      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-
-    // Strip markdown code fences if present
-    const cleaned = rawText.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+    // Strip markdown fences if present (Gemini sometimes adds them)
+    const cleaned = rawText
+      .replace(/^```(?:json)?\n?/, "")
+      .replace(/\n?```$/, "")
+      .trim();
 
     let parsed: SearchResponse;
     try {
       parsed = JSON.parse(cleaned);
     } catch {
-      return NextResponse.json<SearchResponse>({
-        reply: query,
-        matches: [],
-      });
+      return NextResponse.json<SearchResponse>({ reply: query, matches: [] });
     }
 
     return NextResponse.json<SearchResponse>({
@@ -169,6 +199,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("AI search error:", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "AI service error" }, { status: 502 });
   }
 }

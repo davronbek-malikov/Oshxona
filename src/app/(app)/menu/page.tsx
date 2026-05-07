@@ -135,7 +135,7 @@ export default function MenuPage() {
 
       {/* Search */}
       <div className="relative">
-        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground text-lg">
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground text-xl">
           🔍
         </span>
         <input
@@ -143,17 +143,17 @@ export default function MenuPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t("menu.searchPlaceholder")}
-          className="w-full h-12 pl-11 pr-4 rounded-2xl border border-input bg-white text-base focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full h-14 pl-12 pr-4 rounded-2xl border border-input bg-white text-base font-medium focus:outline-none focus:ring-2 focus:ring-ring shadow-sm"
         />
       </div>
 
       {/* View toggle */}
-      <div className="flex bg-gray-100 rounded-xl p-1">
+      <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-border">
         <button
           onClick={() => setView("list")}
-          className={`flex-1 h-9 rounded-lg text-sm font-semibold transition-colors ${
+          className={`flex-1 h-11 rounded-xl text-base font-bold transition-colors ${
             view === "list"
-              ? "bg-white text-foreground shadow-sm"
+              ? "bg-primary text-white shadow-sm"
               : "text-muted-foreground"
           }`}
         >
@@ -161,9 +161,9 @@ export default function MenuPage() {
         </button>
         <button
           onClick={() => setView("map")}
-          className={`flex-1 h-9 rounded-lg text-sm font-semibold transition-colors ${
+          className={`flex-1 h-11 rounded-xl text-base font-bold transition-colors ${
             view === "map"
-              ? "bg-white text-foreground shadow-sm"
+              ? "bg-primary text-white shadow-sm"
               : "text-muted-foreground"
           }`}
         >

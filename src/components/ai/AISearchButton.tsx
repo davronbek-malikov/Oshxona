@@ -64,6 +64,10 @@ declare global {
   }
 }
 
+// z-[61] > BottomNav z-50, so the panel covers the nav when open
+const Z_BACKDROP = "z-[60]";
+const Z_PANEL    = "z-[61]";
+
 export function AISearchButton({ restaurants, menuContext }: Props) {
   const { t, lang } = useLanguage();
   const [open, setOpen] = useState(false);
@@ -80,7 +84,7 @@ export function AISearchButton({ restaurants, menuContext }: Props) {
 
   useEffect(() => {
     if (open) {
-      setTimeout(() => inputRef.current?.focus(), 120);
+      setTimeout(() => inputRef.current?.focus(), 150);
     } else {
       setQuery("");
       setMatches(null);
@@ -97,13 +101,9 @@ export function AISearchButton({ restaurants, menuContext }: Props) {
       setError("");
       setReply("");
 
-      const context =
-        menuContext
-          ? { type: "menu" as const, ...menuContext }
-          : {
-              type: "restaurants" as const,
-              restaurants: restaurants ?? [],
-            };
+      const context = menuContext
+        ? { type: "menu" as const, ...menuContext }
+        : { type: "restaurants" as const, restaurants: restaurants ?? [] };
 
       try {
         const res = await fetch("/api/ai/search", {
@@ -112,7 +112,13 @@ export function AISearchButton({ restaurants, menuContext }: Props) {
           body: JSON.stringify({ query: q.trim(), context }),
         });
         const data = await res.json();
-        if (!res.ok) {
+        if (res.status === 503) {
+          setError(
+            lang === "uz"
+              ? "AI qidiruv sozlanmagan. Gemini API kaliti kerak."
+              : "AI search not configured. Gemini API key required."
+          );
+        } else if (!res.ok) {
           setError(t("ai.error"));
         } else {
           setReply(data.reply ?? "");
@@ -130,16 +136,12 @@ export function AISearchButton({ restaurants, menuContext }: Props) {
   function startVoice() {
     const SR = window.SpeechRecognition ?? window.webkitSpeechRecognition;
     if (!SR) return;
-
-    if (recognitionRef.current) {
-      recognitionRef.current.abort();
-    }
+    recognitionRef.current?.abort();
 
     const r = new SR();
     r.continuous = false;
     r.interimResults = false;
-    r.lang = lang === "uz" ? "uz-UZ" : lang === "en" ? "en-US" : "en-US";
-
+    r.lang = lang === "en" ? "en-US" : "uz-UZ";
     r.onstart = () => setListening(true);
     r.onend = () => setListening(false);
     r.onerror = () => setListening(false);
@@ -148,7 +150,6 @@ export function AISearchButton({ restaurants, menuContext }: Props) {
       setQuery(transcript);
       if (transcript) doSearch(transcript);
     };
-
     recognitionRef.current = r;
     r.start();
   }
@@ -162,38 +163,42 @@ export function AISearchButton({ restaurants, menuContext }: Props) {
 
   return (
     <>
-      {/* Floating trigger button */}
+      {/* Floating trigger — deep purple, bigger */}
       <button
         onClick={() => setOpen(true)}
         aria-label={t("ai.buttonLabel")}
-        className="fixed bottom-[112px] right-4 z-40 w-14 h-14 rounded-full bg-primary text-white shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-transform"
-        style={{ boxShadow: "0 4px 20px rgba(249,115,22,0.45)" }}
+        className="fixed bottom-6 right-4 z-40 w-16 h-16 rounded-2xl text-white flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-transform"
+        style={{
+          background: "linear-gradient(135deg, #7C3AED, #4F46E5)",
+          boxShadow: "0 6px 24px rgba(124,58,237,0.45)",
+        }}
       >
         <span className="text-2xl leading-none">✨</span>
+        <span className="text-[9px] font-bold leading-none">AI</span>
       </button>
 
-      {/* Backdrop */}
-      {open && (
-        <div
-          className="fixed inset-0 z-50 bg-black/50"
-          onClick={() => setOpen(false)}
-        />
-      )}
-
-      {/* Slide-up panel */}
+      {/* Backdrop — z-[60] covers BottomNav (z-50) */}
       <div
-        className={`fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl shadow-2xl transition-transform duration-300 ${
-          open ? "translate-y-0" : "translate-y-full"
-        }`}
-        style={{ maxHeight: "70vh" }}
+        className={`fixed inset-0 ${Z_BACKDROP} transition-opacity duration-300 ${
+          open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        } bg-black/50`}
+        onClick={() => setOpen(false)}
+      />
+
+      {/* Slide-up panel — z-[61], flex column so results scroll inside */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 ${Z_PANEL} bg-white rounded-t-3xl shadow-2xl
+          flex flex-col transition-transform duration-300 ease-out
+          ${open ? "translate-y-0" : "translate-y-full"}`}
+        style={{ maxHeight: "85vh" }}
       >
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1">
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
           <div className="w-10 h-1.5 bg-gray-200 rounded-full" />
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pb-3">
+        <div className="flex items-center justify-between px-5 py-3 flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xl">✨</span>
             <span className="font-bold text-lg">{t("ai.buttonLabel")}</span>
@@ -201,27 +206,27 @@ export function AISearchButton({ restaurants, menuContext }: Props) {
           <button
             onClick={() => setOpen(false)}
             className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-muted-foreground hover:bg-gray-200"
+            aria-label={t("ai.close")}
           >
             ✕
           </button>
         </div>
 
         {/* Input row */}
-        <div className="px-4 pb-3 flex gap-2">
+        <div className="px-4 pb-3 flex gap-2 flex-shrink-0">
           <input
             ref={inputRef}
             type="text"
             value={listening ? t("ai.listening") : query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && doSearch(query)}
+            onKeyDown={(e) => e.key === "Enter" && !loading && doSearch(query)}
             placeholder={t("ai.placeholder")}
             disabled={listening || loading}
             className="flex-1 h-12 px-4 rounded-2xl border border-input bg-gray-50 text-base focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
           />
-          {/* Voice button */}
           <button
             onClick={listening ? stopVoice : startVoice}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
+            className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
               listening
                 ? "bg-red-500 text-white animate-pulse"
                 : "bg-gray-100 text-muted-foreground hover:bg-gray-200"
@@ -230,84 +235,95 @@ export function AISearchButton({ restaurants, menuContext }: Props) {
           >
             🎤
           </button>
-          {/* Search button */}
           <button
             onClick={() => doSearch(query)}
             disabled={!query.trim() || loading || listening}
             className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center flex-shrink-0 disabled:opacity-40 hover:bg-primary/90 active:scale-95 transition-transform"
+            aria-label={t("common.search")}
           >
             {loading ? (
               <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
             ) : (
-              "→"
+              <span className="text-lg font-bold">→</span>
             )}
           </button>
         </div>
 
-        {/* Results */}
-        <div
-          className="overflow-y-auto px-4 pb-8"
-          style={{ maxHeight: "calc(70vh - 160px)" }}
-        >
-          {loading && (
-            <p className="text-center text-muted-foreground py-6 text-sm">
-              {t("ai.searching")}
-            </p>
+        {/* Divider */}
+        <div className="border-t border-gray-100 flex-shrink-0" />
+
+        {/* Results — flex-1 + min-h-0 so this section actually scrolls */}
+        <div className="flex-1 overflow-y-auto min-h-0 px-4 pt-3 pb-8">
+          {/* Empty state — prompt to search */}
+          {!loading && !error && matches === null && (
+            <div className="flex flex-col items-center justify-center py-10 gap-3 text-muted-foreground">
+              <span className="text-4xl">🍽️</span>
+              <p className="text-sm text-center">
+                {lang === "uz"
+                  ? "Taom nomi, kategoriya yoki mahsulot kiriting"
+                  : "Type a food name, category or ingredient"}
+              </p>
+            </div>
           )}
 
-          {error && (
-            <p className="text-center text-red-500 py-6 text-sm">{error}</p>
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-10 gap-3">
+              <span className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <p className="text-sm text-muted-foreground">{t("ai.searching")}</p>
+            </div>
+          )}
+
+          {error && !loading && (
+            <div className="flex flex-col items-center justify-center py-10 gap-2">
+              <span className="text-3xl">⚠️</span>
+              <p className="text-sm text-red-500 text-center">{error}</p>
+            </div>
           )}
 
           {!loading && matches !== null && (
-            <>
+            <div className="space-y-3">
               {reply && (
-                <div className="mb-3 bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 text-sm">
+                <div className="bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3 text-sm text-foreground">
                   {reply}
                 </div>
               )}
 
               {matches.length === 0 ? (
-                <p className="text-center text-muted-foreground py-4 text-sm">
-                  {t("ai.noResults")}
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {matches.map((match) => (
-                    <div
-                      key={match.restaurantId}
-                      className="bg-gray-50 rounded-2xl p-4"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="font-bold text-base">{match.restaurantName}</p>
-                        <Link
-                          href={`/menu/${match.restaurantId}`}
-                          onClick={() => setOpen(false)}
-                          className="text-xs text-primary font-semibold"
-                        >
-                          {t("ai.goToRestaurant")} →
-                        </Link>
-                      </div>
-                      {match.items.length > 0 && (
-                        <ul className="space-y-1">
-                          {match.items.map((item) => (
-                            <li
-                              key={item.id}
-                              className="flex items-center justify-between text-sm"
-                            >
-                              <span className="text-foreground">{item.name}</span>
-                              <span className="text-primary font-semibold">
-                                ₩{item.price.toLocaleString()}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  ))}
+                <div className="flex flex-col items-center justify-center py-8 gap-2">
+                  <span className="text-3xl">🔍</span>
+                  <p className="text-sm text-muted-foreground text-center">
+                    {t("ai.noResults")}
+                  </p>
                 </div>
+              ) : (
+                matches.map((match) => (
+                  <div key={match.restaurantId} className="bg-gray-50 rounded-2xl overflow-hidden">
+                    <div className="flex items-center justify-between px-4 pt-4 pb-2">
+                      <p className="font-bold text-base">{match.restaurantName}</p>
+                      <Link
+                        href={`/menu/${match.restaurantId}`}
+                        onClick={() => setOpen(false)}
+                        className="text-xs text-primary font-semibold bg-primary/10 px-3 py-1.5 rounded-full"
+                      >
+                        {t("ai.goToRestaurant")} →
+                      </Link>
+                    </div>
+                    {match.items.length > 0 && (
+                      <ul className="px-4 pb-4 space-y-2">
+                        {match.items.map((item) => (
+                          <li key={item.id} className="flex items-center justify-between">
+                            <span className="text-sm text-foreground">{item.name}</span>
+                            <span className="text-sm font-bold text-primary">
+                              ₩{item.price.toLocaleString()}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))
               )}
-            </>
+            </div>
           )}
         </div>
       </div>

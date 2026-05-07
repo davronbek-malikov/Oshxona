@@ -17,7 +17,11 @@ export default function RestaurantDashboardPage() {
   const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (loading) return;          // still resolving auth — wait
+    if (!user) {
+      setFetching(false);         // auth resolved, no session → stop spinner
+      return;
+    }
     async function load() {
       const supabase = createClient();
       const { data: r } = await supabase
@@ -46,7 +50,7 @@ export default function RestaurantDashboardPage() {
       setFetching(false);
     }
     load();
-  }, [user]);
+  }, [user, loading]);
 
   if (loading || fetching) {
     return (

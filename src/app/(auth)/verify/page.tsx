@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 
 export default function VerifyPage() {
   const router = useRouter();
@@ -11,6 +10,7 @@ export default function VerifyPage() {
   const [deepLink, setDeepLink] = useState("");
   const [deliveryMethod, setDeliveryMethod] = useState<"telegram" | "sms">("telegram");
   const [devCode, setDevCode] = useState("");
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [resendTimer, setResendTimer] = useState(60);
@@ -18,19 +18,14 @@ export default function VerifyPage() {
 
   useEffect(() => {
     const storedPhone = sessionStorage.getItem("auth_phone");
-    const storedLink = sessionStorage.getItem("auth_deep_link");
-    const storedMethod = sessionStorage.getItem("auth_delivery_method");
-    if (!storedPhone) {
-      router.replace("/login");
-      return;
-    }
+    if (!storedPhone) { router.replace("/login"); return; }
     setPhone(storedPhone);
-    setDeepLink(storedLink || "");
-    setDeliveryMethod((storedMethod as "telegram" | "sms") || "telegram");
+    setDeepLink(sessionStorage.getItem("auth_deep_link") || "");
+    setDeliveryMethod((sessionStorage.getItem("auth_delivery_method") as "telegram" | "sms") || "telegram");
     setDevCode(sessionStorage.getItem("auth_dev_code") || "");
+    setMode((sessionStorage.getItem("auth_mode") as "signin" | "signup") || "signin");
   }, [router]);
 
-  // Countdown timer for resend
   useEffect(() => {
     if (resendTimer <= 0) return;
     const t = setTimeout(() => setResendTimer((n) => n - 1), 1000);
@@ -42,18 +37,13 @@ export default function VerifyPage() {
     const newCode = [...code];
     newCode[index] = digit;
     setCode(newCode);
-
-    if (digit && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
-
-    // Auto-submit when all 6 digits filled
+    if (digit && index < 5) inputRefs.current[index + 1]?.focus();
     if (digit && newCode.every((d) => d !== "") && index === 5) {
       verifyCode(newCode.join(""));
     }
   }
 
-  function handleKeyDown(index: number, e: React.KeyboardEvent) {
+  function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Backspace" && !code[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
@@ -62,24 +52,21 @@ export default function VerifyPage() {
   async function verifyCode(fullCode: string) {
     setLoading(true);
     setError("");
-
     try {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, code: fullCode }),
       });
-
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Wrong code");
+        setError(data.error || "Kod noto'g'ri");
         setCode(["", "", "", "", "", ""]);
         inputRefs.current[0]?.focus();
         return;
       }
 
-      // Sign in client-side using the token hash — no redirect needed
       const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
       const { error: signInError } = await supabase.auth.verifyOtp({
@@ -88,11 +75,26 @@ export default function VerifyPage() {
       });
 
       if (signInError) {
-        setError("Login failed. Please try again.");
+        setError("Kirish amalga oshmadi. Qayta urinib ko'ring.");
         return;
       }
 
-      router.replace("/menu");
+      // Redirect logic:
+      // - Sign Up AND no name set → go to profile setup
+      // - Sign In OR name already set → go to menu
+      const isNewUser = !data.user?.name;
+      if (mode === "signup" && isNewUser) {
+        router.replace("/setup-profile");
+      } else if (data.user?.role === "restaurant") {
+        router.replace("/restaurant/dashboard");
+      } else {
+        const confirmed = localStorage.getItem("oshxona_role_confirmed");
+        if (!confirmed) {
+          router.replace("/role-picker");
+        } else {
+          router.replace("/menu");
+        }
+      }
     } catch {
       setError("Internet aloqasini tekshiring");
     } finally {
@@ -104,7 +106,6 @@ export default function VerifyPage() {
     if (resendTimer > 0) return;
     setResendTimer(60);
     setError("");
-
     const res = await fetch("/api/auth/request-otp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -113,10 +114,10 @@ export default function VerifyPage() {
     const data = await res.json();
     if (data.method) {
       setDeliveryMethod(data.method);
-      sessionStorage.setItem("auth_delivery_method", data.method);
       setDeepLink(data.deepLink ?? "");
-      sessionStorage.setItem("auth_deep_link", data.deepLink ?? "");
       setDevCode(data.devCode ?? "");
+      sessionStorage.setItem("auth_delivery_method", data.method);
+      sessionStorage.setItem("auth_deep_link", data.deepLink ?? "");
       sessionStorage.setItem("auth_dev_code", data.devCode ?? "");
     }
   }
@@ -124,47 +125,44 @@ export default function VerifyPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-white px-6">
       <div className="w-full max-w-sm">
+
+        {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary mb-4">
+          <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
             <span className="text-4xl">🔐</span>
           </div>
-          <h1 className="text-2xl font-bold">Enter verification code</h1>
-          <p className="text-muted-foreground mt-2 text-sm">
-            {deliveryMethod === "sms"
-              ? "6-digit code sent via SMS"
-              : "Get your 6-digit code from Telegram"}
+          <h1 className="text-[24px] font-extrabold text-[#111]">
+            {mode === "signup" ? "Hisobni tasdiqlash" : "Tasdiqlash kodi"}
+          </h1>
+          <p className="text-[14px] text-[#AAAAAA] mt-2">
+            {deliveryMethod === "telegram"
+              ? "Telegramdan tasdiqlash kodini oling"
+              : "SMS orqali yuborildi"}
           </p>
-          <p className="font-semibold mt-1">{phone}</p>
+          <p className="font-bold text-[15px] text-[#111] mt-1">{phone}</p>
         </div>
 
-        {/* Dev mode: show code directly (localhost only, never in production) */}
+        {/* Dev mode code */}
         {devCode && (
-          <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4 mb-4 text-center">
-            <p className="text-xs font-semibold text-yellow-700 uppercase mb-1">Dev mode — your code</p>
-            <p className="text-4xl font-mono font-bold tracking-widest text-yellow-800">{devCode}</p>
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 mb-5 text-center">
+            <p className="text-[11px] font-bold text-amber-600 uppercase mb-1">Dev mode — kod</p>
+            <p className="text-4xl font-mono font-black tracking-widest text-amber-800">{devCode}</p>
           </div>
         )}
 
-        {/* Telegram deep-link button — only shown when using Telegram */}
+        {/* Telegram deep link */}
         {deliveryMethod === "telegram" && deepLink && (
           <a
             href={deepLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full h-12 rounded-xl bg-[#2AABEE] text-white font-semibold text-base mb-6"
+            className="flex items-center justify-center gap-2 w-full h-13 rounded-2xl bg-[#2AABEE] text-white font-bold text-[15px] mb-6 py-3.5"
           >
-            <span>✈️</span> Open Telegram to get code
+            ✈️ Telegramda kodni olish
           </a>
         )}
 
-        {/* SMS notice */}
-        {deliveryMethod === "sms" && (
-          <div className="flex items-center gap-2 w-full h-12 rounded-xl bg-green-50 border border-green-200 text-green-800 font-medium text-sm justify-center mb-6">
-            📱 Code sent to {phone}
-          </div>
-        )}
-
-        {/* 6-digit code inputs */}
+        {/* 6-digit OTP inputs */}
         <div className="flex gap-2 justify-center mb-6">
           {code.map((digit, i) => (
             <input
@@ -176,38 +174,33 @@ export default function VerifyPage() {
               value={digit}
               onChange={(e) => handleDigit(i, e.target.value)}
               onKeyDown={(e) => handleKeyDown(i, e)}
-              className="w-12 h-14 text-center text-2xl font-bold border-2 rounded-xl
-                focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring
-                transition-colors"
-              style={{ borderColor: digit ? "var(--primary)" : undefined }}
+              className="w-12 h-14 text-center text-2xl font-black border-2 rounded-2xl focus:outline-none transition-colors"
+              style={{
+                borderColor: digit ? "var(--primary)" : "#EEEEEE",
+                color: digit ? "var(--primary)" : "#111",
+              }}
             />
           ))}
         </div>
 
         {error && (
-          <p className="text-destructive text-sm text-center mb-4">{error}</p>
+          <p className="text-red-500 text-[14px] text-center mb-4">{error}</p>
         )}
 
-        <Button
+        <button
           onClick={() => verifyCode(code.join(""))}
-          className="w-full"
-          size="lg"
           disabled={loading || code.some((d) => !d)}
+          className="w-full h-14 rounded-2xl bg-primary text-white font-bold text-[17px] disabled:opacity-40 active:scale-[0.98] transition-transform"
         >
           {loading ? "Tekshirilmoqda..." : "Tasdiqlash ✓"}
-        </Button>
+        </button>
 
         {/* Resend */}
-        <div className="text-center mt-6">
+        <div className="text-center mt-5">
           {resendTimer > 0 ? (
-            <p className="text-muted-foreground text-sm">
-              Qayta yuborish: {resendTimer}s
-            </p>
+            <p className="text-[#AAAAAA] text-sm">Qayta yuborish: {resendTimer}s</p>
           ) : (
-            <button
-              onClick={handleResend}
-              className="text-primary font-semibold text-sm underline"
-            >
+            <button onClick={handleResend} className="text-primary font-bold text-sm">
               Kodni qayta yuborish
             </button>
           )}
@@ -215,15 +208,13 @@ export default function VerifyPage() {
 
         <button
           onClick={() => {
-            sessionStorage.removeItem("auth_phone");
-            sessionStorage.removeItem("auth_deep_link");
-            sessionStorage.removeItem("auth_delivery_method");
-            sessionStorage.removeItem("auth_dev_code");
+            ["auth_phone","auth_deep_link","auth_delivery_method","auth_dev_code","auth_mode"]
+              .forEach((k) => sessionStorage.removeItem(k));
             router.push("/login");
           }}
-          className="w-full text-center text-sm text-muted-foreground mt-4"
+          className="w-full text-center text-[13px] text-[#AAAAAA] mt-5"
         >
-          ← Back
+          ← Orqaga qaytish
         </button>
       </div>
     </div>

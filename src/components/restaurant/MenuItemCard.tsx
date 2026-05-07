@@ -13,55 +13,51 @@ export function MenuItemCard({ item, onAdd }: Props) {
   const unavailable = !item.is_available || item.sold_out_today;
 
   return (
-    <div
-      className={`bg-white rounded-2xl overflow-hidden flex gap-3 p-3 ${
-        unavailable ? "opacity-60" : ""
-      }`}
-    >
+    <div className={`flex items-center gap-4 px-4 py-4 ${unavailable ? "opacity-40" : ""}`}>
+      {/* Photo */}
       {item.photo_url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={item.photo_url}
           alt={item.name_uz}
-          className="w-24 h-24 object-cover rounded-xl flex-shrink-0"
+          className="w-[88px] h-[88px] object-cover rounded-2xl flex-shrink-0"
         />
       ) : (
-        <div className="w-24 h-24 bg-gray-100 rounded-xl flex items-center justify-center flex-shrink-0">
+        <div className="w-[88px] h-[88px] bg-[#F5F5F5] rounded-2xl flex items-center justify-center flex-shrink-0">
           <span className="text-3xl">🍽️</span>
         </div>
       )}
 
-      <div className="flex-1 min-w-0 flex flex-col justify-between">
-        <div>
-          <p className="font-semibold text-base leading-tight">{item.name_uz}</p>
-          {item.name_en && (
-            <p className="text-xs text-muted-foreground mt-0.5">{item.name_en}</p>
-          )}
-          {item.description && (
-            <p className="text-muted-foreground text-sm mt-1 line-clamp-2">
-              {item.description}
-            </p>
-          )}
-        </div>
+      {/* Text */}
+      <div className="flex-1 min-w-0">
+        <p className="font-bold text-[17px] text-[#111] leading-snug">
+          {item.name_uz}
+        </p>
+        {item.description && (
+          <p className="text-[13px] text-[#BBBBBB] mt-1 line-clamp-2 leading-relaxed">
+            {item.description}
+          </p>
+        )}
+        <p className="font-extrabold text-[18px] text-primary mt-2">
+          ₩{item.price_krw.toLocaleString()}
+        </p>
+      </div>
 
-        <div className="flex items-center justify-between mt-2">
-          <span className="font-bold text-lg text-primary">
-            ₩{item.price_krw.toLocaleString()}
+      {/* Action */}
+      <div className="flex-shrink-0">
+        {unavailable ? (
+          <span className="text-[12px] text-[#BBBBBB] font-medium">
+            {item.sold_out_today ? "Tugagan" : "Yoʻq"}
           </span>
-
-          {unavailable ? (
-            <span className="text-xs bg-gray-100 text-gray-500 px-3 py-1.5 rounded-full font-medium">
-              {item.sold_out_today ? "Bugun tugagan" : "Mavjud emas"}
-            </span>
-          ) : (
-            <button
-              onClick={() => onAdd(item)}
-              className="w-10 h-10 bg-primary text-white rounded-xl text-xl font-bold flex items-center justify-center active:scale-95 transition-transform"
-            >
-              +
-            </button>
-          )}
-        </div>
+        ) : (
+          <button
+            onClick={() => onAdd(item)}
+            className="w-9 h-9 rounded-full border-2 border-primary text-primary text-xl font-bold flex items-center justify-center active:bg-primary active:text-white transition-colors"
+            aria-label="Qo'shish"
+          >
+            +
+          </button>
+        )}
       </div>
     </div>
   );

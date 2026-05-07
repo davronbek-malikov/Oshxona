@@ -108,7 +108,7 @@ export function OrderStatusToast() {
 
   return (
     <div
-      className={`fixed bottom-[76px] left-3 right-3 z-[55] max-w-[620px] mx-auto transition-all duration-400 ease-out ${
+      className={`fixed bottom-4 left-3 right-3 z-[55] max-w-[620px] mx-auto transition-all duration-400 ease-out ${
         visible
           ? "translate-y-0 opacity-100 scale-100"
           : "translate-y-6 opacity-0 scale-95 pointer-events-none"

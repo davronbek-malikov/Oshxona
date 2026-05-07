@@ -58,7 +58,7 @@ function playAlert() {
 }
 
 export default function RestaurantOrdersPage() {
-  const { user } = useCurrentUser();
+  const { user, loading: userLoading } = useCurrentUser();
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,7 +69,8 @@ export default function RestaurantOrdersPage() {
 
   // Step 1: load restaurant + initial orders
   useEffect(() => {
-    if (!user) return;
+    if (userLoading) return;
+    if (!user) { setLoading(false); return; }
     const supabase = createClient();
 
     async function load() {
@@ -93,7 +94,7 @@ export default function RestaurantOrdersPage() {
       setLoading(false);
     }
     load();
-  }, [user]);
+  }, [user, userLoading]);
 
   // Step 2: set up Realtime once restaurantId is known
   useEffect(() => {

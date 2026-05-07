@@ -9,7 +9,6 @@ interface Props {
   photos?: string[];
   opening_time?: string | null;
   closing_time?: string | null;
-  avgRating?: number;
 }
 
 function isOpen(opening: string | null | undefined, closing: string | null | undefined) {
@@ -19,72 +18,61 @@ function isOpen(opening: string | null | undefined, closing: string | null | und
   return hhmm >= opening && hhmm <= closing;
 }
 
-export function RestaurantCard({
-  id,
-  name_uz,
-  description,
-  address,
-  distance_km,
-  photos,
-  opening_time,
-  closing_time,
-}: Props) {
+export function RestaurantCard({ id, name_uz, description, address, distance_km, photos, opening_time, closing_time }: Props) {
   const open = isOpen(opening_time, closing_time);
   const photo = photos?.[0];
 
   return (
     <Link href={`/menu/${id}`}>
-      <div className="bg-white rounded-2xl overflow-hidden shadow-sm active:scale-[0.98] transition-transform">
+      <div className="bg-white rounded-2xl overflow-hidden active:scale-[0.98] transition-transform"
+           style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
         {/* Photo */}
-        <div className="h-36 bg-gray-100 relative overflow-hidden">
+        <div className="h-48 bg-[#F5F5F5] relative overflow-hidden">
           {photo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={photo}
-              alt={name_uz}
-              className="w-full h-full object-cover"
-            />
+            <img src={photo} alt={name_uz} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <span className="text-5xl">🍽️</span>
+              <span className="text-6xl">🍽️</span>
             </div>
           )}
-          {open !== null && (
-            <span
-              className={`absolute top-2 right-2 text-xs font-semibold px-2 py-1 rounded-full ${
-                open
-                  ? "bg-green-500 text-white"
-                  : "bg-gray-700 text-white"
-              }`}
-            >
-              {open ? "Ochiq" : "Yopiq"}
-            </span>
-          )}
+
+          {/* Gradient overlay at bottom */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+
+          {/* Badges */}
+          <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
+            <h3 className="text-white font-extrabold text-[20px] leading-tight drop-shadow-sm">
+              {name_uz}
+            </h3>
+            <div className="flex flex-col items-end gap-1.5">
+              {open !== null && (
+                <span className={`text-[12px] font-bold px-2.5 py-1 rounded-full ${
+                  open ? "bg-green-500 text-white" : "bg-black/50 text-white"
+                }`}>
+                  {open ? "Ochiq" : "Yopiq"}
+                </span>
+              )}
+              {distance_km !== undefined && distance_km > 0 && (
+                <span className="text-[12px] font-semibold px-2.5 py-1 rounded-full bg-black/40 text-white backdrop-blur-sm">
+                  {distance_km < 1 ? `${Math.round(distance_km * 1000)}m` : `${distance_km.toFixed(1)}km`}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Info */}
-        <div className="p-4">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="font-bold text-base leading-tight">{name_uz}</h3>
-            {distance_km !== undefined && (
-              <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
-                📍 {distance_km < 1
-                  ? `${Math.round(distance_km * 1000)} m`
-                  : `${distance_km.toFixed(1)} km`}
-              </span>
+        {(description || address) && (
+          <div className="px-4 py-3">
+            {description && (
+              <p className="text-[13px] text-[#AAAAAA] line-clamp-1">{description}</p>
+            )}
+            {address && !description && (
+              <p className="text-[13px] text-[#AAAAAA] truncate">{address}</p>
             )}
           </div>
-          {description && (
-            <p className="text-muted-foreground text-sm mt-1 line-clamp-2">
-              {description}
-            </p>
-          )}
-          {address && (
-            <p className="text-xs text-muted-foreground mt-1 truncate">
-              {address}
-            </p>
-          )}
-        </div>
+        )}
       </div>
     </Link>
   );

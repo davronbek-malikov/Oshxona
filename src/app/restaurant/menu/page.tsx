@@ -9,13 +9,14 @@ import type { Database } from "@/types/database";
 type MenuItem = Database["public"]["Tables"]["menu_items"]["Row"];
 
 export default function RestaurantMenuPage() {
-  const { user } = useCurrentUser();
+  const { user, loading: userLoading } = useCurrentUser();
   const [items, setItems] = useState<MenuItem[]>([]);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (userLoading) return;
+    if (!user) { setLoading(false); return; }
     async function load() {
       const supabase = createClient();
       const { data: r } = await supabase
@@ -37,7 +38,7 @@ export default function RestaurantMenuPage() {
       setLoading(false);
     }
     load();
-  }, [user]);
+  }, [user, userLoading]);
 
   async function toggleAvailable(item: MenuItem) {
     const supabase = createClient();

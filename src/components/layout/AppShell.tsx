@@ -1,7 +1,7 @@
 "use client";
 
 import { useLanguage } from "@/context/LanguageContext";
-import { BottomNav } from "./BottomNav";
+import { SideNav } from "./SideNav";
 import { OrderStatusToast } from "@/components/orders/OrderStatusToast";
 
 interface AppShellProps {
@@ -15,33 +15,40 @@ export function AppShell({ children, title, subtitle, hideNav = false }: AppShel
   const { t } = useLanguage();
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col min-h-screen bg-background max-w-[640px] mx-auto">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white border-b border-border">
-        <div className="max-w-[640px] mx-auto px-4 py-3 flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary">
+      <header className="sticky top-0 z-40 bg-white border-b border-[#EEEEEE]">
+        <div className="px-4 py-3.5 flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-primary">
             <span className="text-xl">🍽️</span>
           </div>
           <div>
-            <h1 className="text-lg font-bold leading-tight text-foreground">
+            <h1 className="text-[18px] font-extrabold leading-tight text-[#111] tracking-tight">
               {title ?? "Oshxona"}
             </h1>
-            <p className="text-xs text-muted-foreground leading-none">
+            <p className="text-[12px] text-[#BBBBBB] leading-none mt-0.5">
               {subtitle ?? t("shell.subtitle")}
             </p>
           </div>
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="flex-1 max-w-[640px] mx-auto w-full px-4 py-4 pb-24">
-        {children}
-      </main>
+      {/* Body: left sidebar + content */}
+      <div className="flex flex-1">
+        {/* Left sidebar */}
+        {!hideNav && (
+          <div className="sticky top-[57px] h-[calc(100vh-57px)] flex-shrink-0">
+            <SideNav />
+          </div>
+        )}
 
-      {/* Bottom navigation */}
-      {!hideNav && <BottomNav />}
+        {/* Main content */}
+        <main className="flex-1 min-w-0 px-4 py-4 pb-8 overflow-x-hidden">
+          {children}
+        </main>
+      </div>
 
-      {/* Global order status toast — appears above bottom nav on any status change */}
+      {/* Order status toast — positioned to clear the sidebar */}
       <OrderStatusToast />
     </div>
   );

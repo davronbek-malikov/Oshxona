@@ -24,8 +24,8 @@ export function ConfirmModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 px-4 pb-safe">
-      <div className="w-full max-w-[640px] bg-white rounded-t-3xl p-6 space-y-4 animate-in slide-in-from-bottom duration-200">
+    <div className="fixed inset-0 z-[62] flex items-end justify-center bg-black/50 px-4">
+      <div className="w-full max-w-[640px] bg-white rounded-t-3xl p-6 pb-10 space-y-4">
         <h3 className="font-bold text-lg">{title}</h3>
         {description && (
           <p className="text-muted-foreground text-sm">{description}</p>

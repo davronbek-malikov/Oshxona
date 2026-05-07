@@ -165,22 +165,29 @@ export default function RestaurantMenuPage() {
   return (
     <div className="space-y-4 pb-28">
       {/* Back + header */}
-      <div className="flex items-center gap-3 -mx-4 px-4 py-2 bg-white sticky top-[72px] z-30 border-b">
-        <button onClick={() => router.back()} className="text-2xl">
+      <div className="flex items-center gap-3 -mx-4 px-4 py-3 bg-white sticky top-[68px] z-30 border-b border-[#EEEEEE]">
+        <button
+          onClick={() => router.back()}
+          className="w-9 h-9 rounded-full bg-[#F5F5F5] flex items-center justify-center text-[#111] font-bold text-lg flex-shrink-0"
+        >
           ←
         </button>
         <div className="flex-1 min-w-0">
-          <h1 className="font-bold text-lg truncate">{restaurant.name_uz}</h1>
+          <h1 className="font-extrabold text-[18px] text-[#111] truncate leading-tight">
+            {restaurant.name_uz}
+          </h1>
           {restaurant.address && (
-            <p className="text-xs text-muted-foreground truncate">
+            <p className="text-[12px] text-[#AAAAAA] truncate mt-0.5">
               {restaurant.address}
             </p>
           )}
         </div>
         {open !== null && (
           <span
-            className={`text-xs font-semibold px-3 py-1 rounded-full flex-shrink-0 ${
-              open ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+            className={`text-[13px] font-bold px-3 py-1 rounded-full flex-shrink-0 ${
+              open
+                ? "bg-green-50 text-green-600"
+                : "bg-[#F5F5F5] text-[#AAAAAA]"
             }`}
           >
             {open ? t("restaurant.open") : t("restaurant.closed")}
@@ -190,7 +197,7 @@ export default function RestaurantMenuPage() {
 
       {/* Search */}
       <div className="relative">
-        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#BBBBBB] text-base">
           🔍
         </span>
         <input
@@ -198,20 +205,21 @@ export default function RestaurantMenuPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t("common.search") + "..."}
-          className="w-full h-11 pl-11 pr-4 rounded-2xl border border-input bg-white text-base focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full h-12 pl-11 pr-4 rounded-2xl bg-white text-[15px] text-[#111] placeholder:text-[#BBBBBB] focus:outline-none focus:ring-2 focus:ring-primary/30 border-0 shadow-none"
+          style={{ boxShadow: "0 1px 8px rgba(0,0,0,0.06)" }}
         />
       </div>
 
-      {/* Category chips */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-hide">
+      {/* Category tabs — minimal underline style */}
+      <div className="flex gap-0 overflow-x-auto -mx-4 px-4 border-b border-[#EEEEEE]">
         {usedCategories.map((cat) => (
           <button
             key={cat.value}
             onClick={() => setActiveCategory(cat.value)}
-            className={`flex-shrink-0 h-9 px-4 rounded-full text-sm font-semibold transition-colors ${
+            className={`flex-shrink-0 px-4 py-3 text-[14px] font-bold transition-colors whitespace-nowrap border-b-2 -mb-[1px] ${
               activeCategory === cat.value
-                ? "bg-primary text-white"
-                : "bg-white border border-border text-muted-foreground"
+                ? "border-primary text-primary"
+                : "border-transparent text-[#AAAAAA]"
             }`}
           >
             {cat.value === "all" ? t("restaurant.allCategories") : cat.label}
@@ -219,23 +227,24 @@ export default function RestaurantMenuPage() {
         ))}
       </div>
 
-      {/* Items */}
-      {visible.length === 0 && (
-        <div className="bg-white rounded-2xl p-8 text-center">
+      {/* Items — single white container with dividers */}
+      {visible.length === 0 ? (
+        <div className="bg-white rounded-2xl p-10 text-center">
           <span className="text-4xl">🍽️</span>
-          <p className="text-muted-foreground mt-3">{t("menu.notFound")}</p>
+          <p className="text-[#AAAAAA] mt-3 text-[15px]">{t("menu.notFound")}</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl overflow-hidden divide-y divide-[#F2F2F2]">
+          {visible.map((item) => (
+            <MenuItemCard key={item.id} item={item} onAdd={handleAdd} />
+          ))}
         </div>
       )}
-      <div className="space-y-3">
-        {visible.map((item) => (
-          <MenuItemCard key={item.id} item={item} onAdd={handleAdd} />
-        ))}
-      </div>
 
       {/* Clear cart prompt */}
       {showClearPrompt && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">
-          <div className="bg-white rounded-t-3xl p-6 w-full max-w-[640px] space-y-4">
+        <div className="fixed inset-0 z-[62] flex items-end justify-center bg-black/50">
+          <div className="bg-white rounded-t-3xl p-6 pb-10 w-full max-w-[640px] space-y-4">
             <h3 className="font-bold text-lg">{t("restaurant.clearCartTitle")}</h3>
             <p className="text-muted-foreground text-sm">
               {t("restaurant.clearCartMsg")}
