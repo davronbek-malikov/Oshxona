@@ -39,7 +39,11 @@ export async function POST(req: NextRequest) {
   const telegramUserId = msg.from.id;
 
   if (text.startsWith("/start")) {
-    const phone = text.replace("/start", "").trim();
+    // Restore the + prefix stripped in buildTelegramDeepLink
+    const rawParam = text.replace("/start", "").trim();
+    const phone = rawParam
+      ? rawParam.startsWith("+") ? rawParam : `+${rawParam}`
+      : "";
 
     if (!phone) {
       await sendTelegramMessage(chatId, "Salom! Oshxona ilovasiga kiring va telefoningizni kiriting.");

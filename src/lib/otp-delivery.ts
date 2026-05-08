@@ -11,7 +11,11 @@ export function getDeliveryMethod(): DeliveryMethod {
 
 export function buildTelegramDeepLink(phone: string): string {
   const botUsername = process.env.TELEGRAM_BOT_USERNAME ?? "OshxonaBot";
-  return `https://t.me/${botUsername}?start=${encodeURIComponent(phone)}`;
+  // Telegram start param only allows a-z A-Z 0-9 _ -
+  // Strip the leading + so +821028222901 → 821028222901
+  // Webhook adds it back when looking up the OTP
+  const safePhone = phone.replace(/^\+/, "");
+  return `https://t.me/${botUsername}?start=${safePhone}`;
 }
 
 // ─── SMS via Solapi ───────────────────────────────────────────────────────────

@@ -165,14 +165,19 @@ export default function VerifyPage() {
 
         {/* First time: needs to open bot */}
         {deliveryMethod === "telegram" && !autoSent && deepLink && (
-          <a
-            href={deepLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full rounded-2xl bg-[#2AABEE] text-white font-bold text-[15px] mb-6 py-4"
-          >
-            ✈️ Telegramda kodni olish
-          </a>
+          <div className="mb-6 space-y-3">
+            <a
+              href={deepLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full rounded-2xl bg-[#2AABEE] text-white font-bold text-[15px] py-4"
+            >
+              ✈️ Telegramda kodni olish
+            </a>
+            <div className="bg-[#F0F9FF] rounded-2xl px-4 py-3 text-[13px] text-[#0369A1] leading-relaxed">
+              📌 Telegram ochiladi → <b>START</b> tugmasini bosing → kod avtomatik keladi
+            </div>
+          </div>
         )}
 
         {/* 6-digit OTP inputs */}
