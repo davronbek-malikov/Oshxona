@@ -8,6 +8,7 @@ export default function VerifyPage() {
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const [phone, setPhone] = useState("");
   const [deepLink, setDeepLink] = useState("");
+  const [autoSent, setAutoSent] = useState(false);
   const [deliveryMethod, setDeliveryMethod] = useState<"telegram" | "sms">("telegram");
   const [devCode, setDevCode] = useState("");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -21,6 +22,7 @@ export default function VerifyPage() {
     if (!storedPhone) { router.replace("/login"); return; }
     setPhone(storedPhone);
     setDeepLink(sessionStorage.getItem("auth_deep_link") || "");
+    setAutoSent(sessionStorage.getItem("auth_auto_sent") === "true");
     setDeliveryMethod((sessionStorage.getItem("auth_delivery_method") as "telegram" | "sms") || "telegram");
     setDevCode(sessionStorage.getItem("auth_dev_code") || "");
     setMode((sessionStorage.getItem("auth_mode") as "signin" | "signup") || "signin");
@@ -150,13 +152,24 @@ export default function VerifyPage() {
           </div>
         )}
 
-        {/* Telegram deep link */}
-        {deliveryMethod === "telegram" && deepLink && (
+        {/* Auto-sent: code already in Telegram DM */}
+        {deliveryMethod === "telegram" && autoSent && (
+          <div className="flex items-center gap-3 w-full rounded-2xl bg-green-50 border border-green-200 px-4 py-4 mb-6">
+            <span className="text-2xl">✅</span>
+            <div>
+              <p className="font-bold text-[15px] text-green-700">Kod Telegramga yuborildi!</p>
+              <p className="text-[13px] text-green-600">Telegram ilovasini oching va kodni ko'ring</p>
+            </div>
+          </div>
+        )}
+
+        {/* First time: needs to open bot */}
+        {deliveryMethod === "telegram" && !autoSent && deepLink && (
           <a
             href={deepLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full h-13 rounded-2xl bg-[#2AABEE] text-white font-bold text-[15px] mb-6 py-3.5"
+            className="flex items-center justify-center gap-2 w-full rounded-2xl bg-[#2AABEE] text-white font-bold text-[15px] mb-6 py-4"
           >
             ✈️ Telegramda kodni olish
           </a>

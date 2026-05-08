@@ -21,7 +21,7 @@ async function sendTelegramMessage(chatId: number, text: string) {
 }
 
 export async function POST(req: NextRequest) {
-  // Verify the request is genuinely from Telegram
+  // Verify request is from Telegram
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (secret) {
     const headerSecret = req.headers.get("x-telegram-bot-api-secret-token");
@@ -32,26 +32,23 @@ export async function POST(req: NextRequest) {
 
   const body: TelegramUpdate = await req.json();
   const msg = body.message;
-
   if (!msg?.text) return NextResponse.json({ ok: true });
 
   const text = msg.text.trim();
   const chatId = msg.chat.id;
+  const telegramUserId = msg.from.id;
 
-  // Handle /start <phone> deep-link
   if (text.startsWith("/start")) {
     const phone = text.replace("/start", "").trim();
 
     if (!phone) {
-      await sendTelegramMessage(
-        chatId,
-        "Salom! Oshxona ilovasiga kiring va telefoningizni kiriting."
-      );
+      await sendTelegramMessage(chatId, "Salom! Oshxona ilovasiga kiring va telefoningizni kiriting.");
       return NextResponse.json({ ok: true });
     }
 
     const supabase = await createAdminClient();
 
+    // Find OTP for this phone
     const { data: otp } = await supabase
       .from("phone_otps")
       .select("id, code")
@@ -64,18 +61,20 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (!otp) {
-      await sendTelegramMessage(
-        chatId,
-        "Kod topilmadi yoki muddati o'tgan. Iltimos, ilovadan qayta so'rang."
-      );
+      await sendTelegramMessage(chatId, "Kod topilmadi yoki muddati o'tgan. Iltimos, ilovadan qayta so'rang.");
       return NextResponse.json({ ok: true });
     }
 
-    await supabase
-      .from("phone_otps")
-      .update({ delivered: true })
-      .eq("id", otp.id);
+    // Mark delivered
+    await supabase.from("phone_otps").update({ delivered: true }).eq("id", otp.id);
 
+    // ✅ Save telegram_user_id to users table so future logins are automatic
+    await supabase
+      .from("users")
+      .update({ telegram_user_id: telegramUserId })
+      .eq("phone", phone);
+
+    // Send the OTP code
     await sendTelegramMessage(
       chatId,
       `🔐 <b>Oshxona tasdiqlash kodi:</b>\n\n<code>${otp.code}</code>\n\nBu kod 5 daqiqa amal qiladi.\n\nYour Oshxona verification code: <code>${otp.code}</code>`

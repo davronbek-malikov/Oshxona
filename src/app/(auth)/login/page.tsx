@@ -47,6 +47,7 @@ export default function LoginPage() {
       sessionStorage.setItem("auth_delivery_method", data.method);
       sessionStorage.setItem("auth_deep_link", data.deepLink ?? "");
       sessionStorage.setItem("auth_dev_code", data.devCode ?? "");
+      sessionStorage.setItem("auth_auto_sent", data.autoSent ? "true" : "false");
 
       router.push("/verify");
     } catch {
