@@ -148,23 +148,23 @@ export default function MenuPage() {
       </div>
 
       {/* View toggle */}
-      <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-border">
+      <div className="flex bg-[#F0F0F0] rounded-2xl p-1 gap-1">
         <button
           onClick={() => setView("list")}
-          className={`flex-1 h-11 rounded-xl text-base font-bold transition-colors ${
+          className={`flex-1 h-10 rounded-xl text-[14px] font-bold transition-all ${
             view === "list"
-              ? "bg-primary text-white shadow-sm"
-              : "text-muted-foreground"
+              ? "bg-white text-[#111] shadow-sm"
+              : "text-[#AAAAAA]"
           }`}
         >
           📋 {t("menu.listView")}
         </button>
         <button
           onClick={() => setView("map")}
-          className={`flex-1 h-11 rounded-xl text-base font-bold transition-colors ${
+          className={`flex-1 h-10 rounded-xl text-[14px] font-bold transition-all ${
             view === "map"
-              ? "bg-primary text-white shadow-sm"
-              : "text-muted-foreground"
+              ? "bg-white text-[#111] shadow-sm"
+              : "text-[#AAAAAA]"
           }`}
         >
           🗺️ {t("menu.mapView")}
