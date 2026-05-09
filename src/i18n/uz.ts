@@ -1,6 +1,7 @@
 export const UZ = {
   nav: {
     menu: "Menyu",
+    restaurants: "Oshxonalar",
     cart: "Savat",
     orders: "Buyurtmalar",
     profile: "Profil",

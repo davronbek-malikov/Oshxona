@@ -1,6 +1,7 @@
 export const EN = {
   nav: {
     menu: "Menu",
+    restaurants: "Restaurants",
     cart: "Cart",
     orders: "Orders",
     profile: "Profile",

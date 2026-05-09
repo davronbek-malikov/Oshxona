@@ -1,7 +1,7 @@
 "use client";
 
 import { useLanguage } from "@/context/LanguageContext";
-import { SideNav } from "./SideNav";
+import { BottomNav } from "./BottomNav";
 import { OrderStatusToast } from "@/components/orders/OrderStatusToast";
 
 interface AppShellProps {
@@ -15,12 +15,23 @@ export function AppShell({ children, title, subtitle, hideNav = false }: AppShel
   const { t } = useLanguage();
 
   return (
-    <div className="flex flex-col min-h-screen bg-background max-w-[640px] mx-auto">
+    <div className="flex flex-col min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-[#EEEEEE]">
-        <div className="px-4 py-3.5 flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-primary">
-            <span className="text-xl">🍽️</span>
+        <div className="max-w-[640px] mx-auto px-4 py-3 flex items-center gap-3">
+          {/* Logo — place logo.png in public/ folder to use custom logo */}
+          <div className="flex items-center justify-center w-11 h-11 rounded-2xl bg-primary overflow-hidden flex-shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.png"
+              alt="Oshxona"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                // Fallback to emoji if logo.png not found
+                (e.target as HTMLImageElement).style.display = "none";
+                (e.target as HTMLImageElement).parentElement!.innerHTML = '<span style="font-size:22px">🍽️</span>';
+              }}
+            />
           </div>
           <div>
             <h1 className="text-[18px] font-extrabold leading-tight text-[#111] tracking-tight">
@@ -33,22 +44,15 @@ export function AppShell({ children, title, subtitle, hideNav = false }: AppShel
         </div>
       </header>
 
-      {/* Body: left sidebar + content */}
-      <div className="flex flex-1">
-        {/* Left sidebar */}
-        {!hideNav && (
-          <div className="sticky top-[57px] h-[calc(100vh-57px)] flex-shrink-0">
-            <SideNav />
-          </div>
-        )}
+      {/* Main content — full width, bottom padding clears BottomNav */}
+      <main className="flex-1 max-w-[640px] mx-auto w-full px-4 py-4 pb-[78px]">
+        {children}
+      </main>
 
-        {/* Main content */}
-        <main className="flex-1 min-w-0 px-4 py-4 pb-8 overflow-x-hidden">
-          {children}
-        </main>
-      </div>
+      {/* Coupang-style bottom navigation */}
+      {!hideNav && <BottomNav />}
 
-      {/* Order status toast — positioned to clear the sidebar */}
+      {/* Global order status toast */}
       <OrderStatusToast />
     </div>
   );

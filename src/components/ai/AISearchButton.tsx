@@ -167,7 +167,7 @@ export function AISearchButton({ restaurants, menuContext }: Props) {
       <button
         onClick={() => setOpen(true)}
         aria-label={t("ai.buttonLabel")}
-        className="fixed bottom-6 right-4 z-40 w-16 h-16 rounded-2xl text-white flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-transform"
+        className="fixed bottom-[74px] right-4 z-40 w-14 h-14 rounded-2xl text-white flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-transform"
         style={{
           background: "linear-gradient(135deg, #7C3AED, #4F46E5)",
           boxShadow: "0 6px 24px rgba(124,58,237,0.45)",

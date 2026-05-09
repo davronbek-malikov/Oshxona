@@ -13,7 +13,7 @@ export function SideNav() {
   const { t } = useLanguage();
 
   const NAV_ITEMS = [
-    { href: "/menu",    icon: UtensilsCrossed, label: t("nav.menu") },
+    { href: "/menu",    icon: UtensilsCrossed, label: t("nav.restaurants") },
     { href: "/cart",    icon: ShoppingCart,    label: t("nav.cart"),    badge: true },
     { href: "/orders",  icon: ClipboardList,   label: t("nav.orders") },
     { href: "/profile", icon: User,            label: t("nav.profile") },

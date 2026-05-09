@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useLanguage } from "@/context/LanguageContext";
+import { SmartEmptyOrders } from "@/components/orders/SmartEmptyOrders";
 import type { Database } from "@/types/database";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -24,13 +25,14 @@ interface OrderWithRestaurant extends Order {
 }
 
 export default function OrdersPage() {
-  const { user } = useCurrentUser();
+  const { user, loading: userLoading } = useCurrentUser();
   const { t } = useLanguage();
   const [orders, setOrders] = useState<OrderWithRestaurant[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (userLoading) return;          // still resolving auth
+    if (!user) { setLoading(false); return; }  // not logged in → stop spinner
     const supabase = createClient();
 
     async function load() {
@@ -70,7 +72,7 @@ export default function OrdersPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, userLoading]);
 
   if (loading) {
     return (
@@ -81,19 +83,7 @@ export default function OrdersPage() {
   }
 
   if (orders.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-        <span className="text-7xl mb-4">📋</span>
-        <h2 className="text-xl font-bold">{t("orders.empty")}</h2>
-        <p className="text-muted-foreground mt-2">{t("orders.emptyMsg")}</p>
-        <Link
-          href="/menu"
-          className="mt-6 h-12 px-8 bg-primary text-white rounded-xl flex items-center font-semibold"
-        >
-          {t("orders.browseRestaurants")}
-        </Link>
-      </div>
-    );
+    return <SmartEmptyOrders />;
   }
 
   return (
