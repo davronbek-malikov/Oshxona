@@ -25,12 +25,12 @@ export function AppShell({ children, title, subtitle, hideNav = false }: AppShel
                style={{ boxShadow: "0 2px 8px rgba(249,115,22,0.2)" }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/logo.png"
+              src="/new_logo.png"
               alt="Oshxona"
               className="w-full h-full object-contain"
               onError={(e) => {
                 const img = e.target as HTMLImageElement;
-                if (!img.src.endsWith("logo.svg")) {
+                if (!img.src.endsWith("new_logo.png")) {
                   img.src = "/logo.svg";
                 } else {
                   img.style.display = "none";

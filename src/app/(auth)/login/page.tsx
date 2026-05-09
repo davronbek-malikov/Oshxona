@@ -57,12 +57,12 @@ export default function LoginPage() {
         <div className="w-36 h-36 mb-6 drop-shadow-xl">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo.png"
+            src="/new_logo.png"
             alt="Oshxona"
             className="w-full h-full object-contain"
             onError={(e) => {
               const img = e.target as HTMLImageElement;
-              if (!img.src.endsWith("logo.svg")) {
+              if (!img.src.endsWith("new_logo.png")) {
                 img.src = "/logo.svg";
               } else {
                 img.parentElement!.innerHTML =
