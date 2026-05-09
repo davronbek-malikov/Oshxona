@@ -149,25 +149,29 @@ export default function OnboardingPage() {
   }
 
   // ─── Final submit ────────────────────────────────────────────────────────
+  const [submitError, setSubmitError] = useState("");
+
   async function handleSubmit() {
-    if (!user) return;
     setSaving(true);
+    setSubmitError("");
 
     try {
       const res = await fetch("/api/restaurant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          owner_id: user.id,
-        }),
+        // owner_id derived server-side from auth session
+        body: JSON.stringify(data),
       });
+
+      const json = await res.json();
 
       if (res.ok) {
         setStep(6);
       } else {
-        alert("Xatolik yuz berdi. Qayta urinib ko'ring.");
+        setSubmitError(json.error ?? "Xatolik yuz berdi. Qayta urinib ko'ring.");
       }
+    } catch {
+      setSubmitError("Internet aloqasini tekshiring.");
     } finally {
       setSaving(false);
     }
@@ -576,6 +580,11 @@ export default function OnboardingPage() {
                 {saving ? "Yuklanmoqda..." : "Yuborish ✓"}
               </Button>
             </div>
+            {submitError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm font-medium">
+                ⚠️ {submitError}
+              </div>
+            )}
           </div>
         )}
 
