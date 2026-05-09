@@ -19,17 +19,22 @@ export function AppShell({ children, title, subtitle, hideNav = false }: AppShel
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-[#EEEEEE]">
         <div className="max-w-[640px] mx-auto px-4 py-3 flex items-center gap-3">
-          {/* Logo — place logo.png in public/ folder to use custom logo */}
-          <div className="flex items-center justify-center w-11 h-11 rounded-2xl bg-primary overflow-hidden flex-shrink-0">
+          {/* Logo — copy your logo.png to public/logo.png to use it */}
+          <div className="w-11 h-11 rounded-2xl overflow-hidden flex-shrink-0 bg-white">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/logo.png"
               alt="Oshxona"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
               onError={(e) => {
-                // Fallback to emoji if logo.png not found
-                (e.target as HTMLImageElement).style.display = "none";
-                (e.target as HTMLImageElement).parentElement!.innerHTML = '<span style="font-size:22px">🍽️</span>';
+                const img = e.target as HTMLImageElement;
+                if (img.src.endsWith("logo.png")) {
+                  img.src = "/logo.svg";
+                } else {
+                  img.style.display = "none";
+                  img.parentElement!.style.background = "#F97316";
+                  img.parentElement!.innerHTML = '<span style="font-size:22px;display:flex;align-items:center;justify-content:center;height:100%">🍽️</span>';
+                }
               }}
             />
           </div>
