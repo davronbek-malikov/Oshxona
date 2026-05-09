@@ -22,33 +22,23 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!phone.trim() || !mode) return;
-
     setLoading(true);
     setError("");
-
     const fullPhone = `${countryCode}${phone.replace(/\s/g, "")}`;
-
     try {
       const res = await fetch("/api/auth/request-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: fullPhone }),
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Xatolik yuz berdi");
-        return;
-      }
-
+      if (!res.ok) { setError(data.error || "Xatolik yuz berdi"); return; }
       sessionStorage.setItem("auth_phone", fullPhone);
       sessionStorage.setItem("auth_mode", mode);
       sessionStorage.setItem("auth_delivery_method", data.method);
       sessionStorage.setItem("auth_deep_link", data.deepLink ?? "");
       sessionStorage.setItem("auth_dev_code", data.devCode ?? "");
       sessionStorage.setItem("auth_auto_sent", data.autoSent ? "true" : "false");
-
       router.push("/verify");
     } catch {
       setError("Internet aloqasini tekshiring");
@@ -58,72 +48,94 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
-      {/* Hero section */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 pt-16 pb-8">
-        <div className="w-24 h-24 rounded-3xl bg-primary flex items-center justify-center mb-5 shadow-lg"
-             style={{ boxShadow: "0 8px 32px rgba(5,150,105,0.35)" }}>
-          <span className="text-5xl">🍽️</span>
+    <div className="min-h-screen flex flex-col bg-[#FAFAFA]">
+
+      {/* ── Hero — large centered logo visible immediately ── */}
+      <div className="flex flex-col items-center justify-center flex-1 px-6 pt-12 pb-6">
+
+        {/* Big logo */}
+        <div className="w-36 h-36 mb-6 drop-shadow-xl">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.png"
+            alt="Oshxona"
+            className="w-full h-full object-contain"
+            onError={(e) => {
+              const img = e.target as HTMLImageElement;
+              if (!img.src.endsWith("logo.svg")) {
+                img.src = "/logo.svg";
+              } else {
+                img.parentElement!.innerHTML =
+                  '<div style="width:144px;height:144px;background:#F97316;border-radius:36px;display:flex;align-items:center;justify-content:center;font-size:64px">🍽️</div>';
+              }
+            }}
+          />
         </div>
-        <h1 className="text-4xl font-extrabold text-[#111] tracking-tight">Oshxona</h1>
-        <p className="text-[#AAAAAA] mt-2 text-base">Koreyadagi halol o'zbek taomlar</p>
+
+        {/* App name */}
+        <h1 className="text-[36px] font-extrabold text-[#111] tracking-tight leading-none">
+          Oshxona
+        </h1>
+        <p className="text-[16px] text-[#666] font-medium mt-2 text-center leading-relaxed">
+          Koreyadagi halol o&apos;zbek taomlar
+        </p>
+        <p className="text-[13px] text-[#AAAAAA] mt-1 text-center">
+          Halal Uzbek food in Korea
+        </p>
       </div>
 
-      {/* Auth section */}
-      <div className="px-6 pb-12">
+      {/* ── Auth section ── */}
+      <div className="px-6 pb-10">
 
-        {/* Mode not selected → show two buttons */}
+        {/* Mode not selected */}
         {!mode && (
           <div className="space-y-3">
             <button
               onClick={() => setMode("signin")}
-              className="w-full h-14 rounded-2xl bg-primary text-white font-bold text-[17px] active:scale-[0.98] transition-transform shadow-sm"
+              className="w-full h-[56px] rounded-2xl bg-primary text-white font-bold text-[17px] active:scale-[0.98] transition-transform"
               style={{ boxShadow: "0 4px 16px rgba(5,150,105,0.3)" }}
             >
               Kirish — Sign In
             </button>
             <button
               onClick={() => setMode("signup")}
-              className="w-full h-14 rounded-2xl border-2 border-primary text-primary font-bold text-[17px] active:scale-[0.98] transition-transform bg-white"
+              className="w-full h-[56px] rounded-2xl border-2 border-primary text-primary font-bold text-[17px] active:scale-[0.98] transition-transform bg-white"
             >
-              Ro'yxatdan o'tish — Sign Up
+              Ro&apos;yxatdan o&apos;tish — Sign Up
             </button>
-
-            <p className="text-center text-[13px] text-[#BBBBBB] mt-6 leading-relaxed">
-              Telefon raqamingiz orqali kiring.{"\n"}No password needed.
+            <p className="text-center text-[13px] text-[#AAAAAA] pt-3">
+              Parol kerak emas — Telegram orqali kiring
             </p>
           </div>
         )}
 
-        {/* Mode selected → show phone form */}
+        {/* Mode selected — phone form */}
         {mode && (
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Back to mode selection */}
             <button
               type="button"
               onClick={() => { setMode(null); setPhone(""); setError(""); }}
-              className="flex items-center gap-1 text-[#AAAAAA] text-sm mb-2"
+              className="flex items-center gap-1.5 text-[#888] text-[14px] font-semibold mb-1"
             >
-              ← {mode === "signin" ? "Kirish" : "Ro'yxatdan o'tish"}
+              ← Orqaga
             </button>
 
             <div>
-              <h2 className="text-[22px] font-extrabold text-[#111] mb-1">
+              <h2 className="text-[24px] font-extrabold text-[#111] mb-1">
                 {mode === "signin" ? "Xush kelibsiz!" : "Yangi hisob"}
               </h2>
-              <p className="text-[14px] text-[#AAAAAA]">
+              <p className="text-[15px] text-[#666]">
                 {mode === "signin"
                   ? "Telefon raqamingizni kiriting"
                   : "Ro'yxatdan o'tish uchun telefon raqamingizni kiriting"}
               </p>
             </div>
 
-            {/* Phone input */}
             <div className="flex gap-2">
               <select
                 value={countryCode}
                 onChange={(e) => setCountryCode(e.target.value)}
-                className="h-14 rounded-2xl border border-[#EEEEEE] px-3 text-base bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 font-medium text-[#111]"
+                className="h-[56px] rounded-2xl border-2 border-[#EEEEEE] px-3 text-[15px] bg-white focus:outline-none focus:border-primary font-semibold text-[#111]"
               >
                 {COUNTRY_CODES.map((c) => (
                   <option key={c.code} value={c.code}>
@@ -137,25 +149,27 @@ export default function LoginPage() {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 autoFocus
-                className="flex-1 h-14 rounded-2xl border border-[#EEEEEE] px-4 text-base font-medium text-[#111] placeholder:text-[#CCCCCC] focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="flex-1 h-[56px] rounded-2xl border-2 border-[#EEEEEE] px-4 text-[15px] font-medium text-[#111] placeholder:text-[#CCCCCC] focus:outline-none focus:border-primary"
               />
             </div>
 
             {error && (
-              <p className="text-red-500 text-sm text-center">{error}</p>
+              <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-red-600 text-[14px] font-medium">
+                ⚠️ {error}
+              </div>
             )}
 
             <button
               type="submit"
               disabled={loading || !phone.trim()}
-              className="w-full h-14 rounded-2xl bg-primary text-white font-bold text-[17px] disabled:opacity-40 active:scale-[0.98] transition-transform"
+              className="w-full h-[56px] rounded-2xl bg-primary text-white font-bold text-[17px] disabled:opacity-40 active:scale-[0.98] transition-transform"
               style={{ boxShadow: "0 4px 16px rgba(5,150,105,0.3)" }}
             >
               {loading ? "Yuborilmoqda..." : "Kodni yuborish →"}
             </button>
 
-            <p className="text-center text-[12px] text-[#CCCCCC]">
-              Telegram orqali tasdiqlash kodi yuboriladi
+            <p className="text-center text-[13px] text-[#AAAAAA]">
+              ✈️ Telegram orqali tasdiqlash kodi yuboriladi
             </p>
           </form>
         )}
