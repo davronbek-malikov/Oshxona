@@ -204,25 +204,97 @@
 
 ---
 
-## Current State (2026-05-09)
+## 2026-05-09 — Part 2: UX Improvements, UI Fixes, Logo, Deployment
+
+### Completed ✅:
+
+**Profile page — complete rewrite:**
+- [x] Profile name editing was silently failing (RLS blocked direct Supabase update from client)
+- [x] Created new `PATCH /api/user/profile` route using admin client — bypasses RLS
+- [x] Added `displayName` local state — UI updates immediately after save without re-fetching
+- [x] Language toggle: removed "uz" / "GB" text prefixes (Windows Chrome renders flag emoji as letter codes)
+- [x] Language now shows plain "O'zbek" / "English" buttons — works on all platforms
+- [x] Language change also persists to server via `/api/user/profile`
+- [x] Avatar shows user's first initial letter instead of generic icon
+
+**Buyurtmalar (Orders) empty state — smart recommendations:**
+- [x] Created `SmartEmptyOrders` component with time + weather-based food suggestions
+- [x] Uses Open-Meteo API (free, no API key) for real temperature data
+- [x] Night time: warns about late eating, suggests light food (Mastava)
+- [x] Cold weather (<10°C): recommends hot Osh, Somsa, Lag'mon
+- [x] Hot weather (>25°C): recommends salads and drinks
+- [x] Time-based defaults: morning → Somsa/Lag'mon, lunch → Osh/Kabob, evening → dinner suggestions
+- [x] Fixed Buyurtmalar stuck on "Yuklanmoqda..." bug (missing `userLoading` guard in useEffect)
+
+**Checkout page — 3 major improvements:**
+- [x] Minimum order ₩15,000 for delivery (no minimum for pickup) — button disabled + warning shown
+- [x] Yubordim button: requires receipt upload OR payment confirmation checkbox (no more silent submit)
+- [x] Delivery address map: Nominatim geocodes address after 800ms pause, shows Leaflet mini-map
+- [x] Created `DeliveryMap` component (dynamic import, no SSR)
+
+**Navigation redesign — Coupang style:**
+- [x] Removed left sidebar (SideNav) — replaced with bottom navigation
+- [x] New BottomNav with custom SVG icons (HomeIcon, CartIcon, OrdersIcon, ProfileIcon)
+- [x] Each icon has filled (active) and outline (inactive) variants
+- [x] 62px height, subtle top shadow — matches Coupang Eats aesthetic
+- [x] Renamed "Menyu" tab to "Oshxonalar" (Restaurants)
+- [x] AppShell updated: uses BottomNav, pb-[78px] to clear nav, full-width content
+
+**Restaurant onboarding fix:**
+- [x] Yuborish button was silently failing — `user` null due to RLS mismatch on users table
+- [x] Removed `if (!user) return` silent guard
+- [x] Removed `owner_id` from client body (API derives from auth session server-side)
+- [x] Added inline red error box below Yuborish button — shows exact API error if fails
+- [x] `POST /api/restaurant`: completely rewrote to derive owner from session, removed owner_id from schema
+
+**Restaurant cards redesign:**
+- [x] Replaced tall gradient-overlay cards with compact horizontal list style
+- [x] 88×88px thumbnail on left, restaurant info on right
+- [x] Open/closed badge top-right, distance below name
+- [x] Light green gradient placeholder when no photo (matches app theme)
+- [x] Much more compact: shows 5-6 restaurants on screen vs 2 before
+- [x] View toggle redesigned: cleaner pill-style tabs
+
+**Logo integration:**
+- [x] AppShell header: logo slot (56×56px, rounded-2xl, orange glow shadow)
+- [x] Login welcome screen: large 144px logo centered, visible immediately on first visit
+- [x] Loads `/new_logo.png` (uploaded by developer) with SVG + emoji fallback chain
+- [x] Text visibility fixed: subtitle #888 (was #BBBBBB), description #666
+- [x] Login page buttons: h-56px, border-2 inputs, better error display (red box)
+
+**Deployment:**
+- [x] GitHub repo changed from private → public (was blocking Vercel deployments)
+- [x] All builds now deploy successfully: 35 routes, 0 TypeScript errors
+- [x] Triggered redeploy after repo made public
+- [x] Live at: https://oshxona-fawn.vercel.app ✅
+
+---
+
+## Current State (2026-05-09 — End of Day)
 
 ### Live at: https://oshxona-fawn.vercel.app
 
 ### Working features ✅:
-- Phone OTP login via Telegram (automatic after first use)
-- Sign Up / Sign In flow with profile setup for new users
-- Restaurant discovery (list + map view)
-- Menu browsing with category filter tabs
+- Phone OTP login via Telegram (automatic after first use — telegram_user_id saved)
+- Sign Up / Sign In flow with profile setup page for new users
+- Profile name editing (server-side via /api/user/profile — RLS bypassed)
+- Restaurant discovery with compact horizontal cards (list + map view)
+- Menu browsing with underline category filter tabs
 - AI Search with voice input (Groq Llama 3.3, free)
-- Add to cart, checkout with bank transfer + receipt upload
+- Add to cart, checkout with bank transfer + receipt or checkbox confirmation
+- Minimum order ₩15,000 for delivery (no minimum for pickup)
+- Delivery address mini-map (Nominatim geocoding + Leaflet)
 - Real-time order tracking (Supabase Realtime)
-- In-app order status toast banner
-- Web Push Notifications (after Vercel deploy, HTTPS required)
-- Restaurant owner dashboard, order management, menu CRUD
-- Admin restaurant approval panel
-- Uzbek/English language switching (persisted)
+- In-app order status toast banner (above bottom nav)
+- Web Push Notifications (HTTPS only — works on Vercel)
+- Restaurant owner dashboard, order management (via secure API route), menu CRUD
+- Restaurant onboarding: Yuborish button fixed (owner_id server-side, error shown inline)
+- Admin restaurant approval panel (/admin/restaurants)
+- Uzbek/English language switching (persisted to DB + localStorage)
 - PWA installable on mobile home screen
-- Left sidebar navigation, green theme, minimalistic design
+- Coupang-style bottom navigation (SVG icons, 4 tabs)
+- Smart empty orders: time + weather-based food recommendations
+- Custom Oshxona logo (new_logo.png) in header and login screen
 
 ### Environment variables (all set in Vercel):
 ```
@@ -231,8 +303,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
 TELEGRAM_BOT_TOKEN          = @mazali_oshxonabot
 TELEGRAM_BOT_USERNAME
-TELEGRAM_WEBHOOK_SECRET
-GROQ_API_KEY                (free AI search)
+TELEGRAM_WEBHOOK_SECRET     = (generated)
+GROQ_API_KEY                = (free AI search)
 NEXT_PUBLIC_VAPID_PUBLIC_KEY
 VAPID_PRIVATE_KEY
 OTP_DELIVERY                = telegram
@@ -246,15 +318,24 @@ NEXT_PUBLIC_APP_URL         = https://oshxona-fawn.vercel.app
 - Seed data: 2 test restaurants (Anor in Jinju, Otash Qassob in Gimhae)
 
 ### Known limitations / next improvements:
-- Telegram OTP requires user to open bot once (Telegram platform limitation — bots can't initiate)
-- SMS fallback for users without Telegram (Solapi integration ready, needs API key)
-- Push notifications require HTTPS (works on Vercel, not on localhost)
-- PWA icons (icon-192.png, icon-512.png) not yet created — uses placeholder
-- No pagination on admin restaurants list
-- No commission/subscription billing system (manually approve paying restaurants)
+- Telegram OTP: first login requires user to open bot once (Telegram platform limitation)
+- SMS fallback ready (Solapi integration built, needs API key + OTP_DELIVERY=sms)
+- Push notifications: HTTPS only (works on Vercel, not localhost)
+- PWA icons (icon-192.png, icon-512.png): placeholder only
+- No pagination on admin restaurants or orders lists
+- No commission/billing system (manually approve paying restaurants)
+- Restaurant menu page: delete uses confirm() — should use ConfirmModal
 
 ### Git log (recent commits):
 ```
+04bb9f7 ci: trigger redeploy — repo is now public
+dae0dca feat: use new_logo.png as app logo in header and login screen
+2c10676 feat: bigger logo in header, logo on login screen, fix text visibility
+23ecdfc fix: compact horizontal restaurant cards + logo.png support
+1f98f31 fix: restaurant card redesign — clean info below photo, no dark overlay
+bd1f4b4 fix: onboarding Yuborish silent failure
+d80530b feat: Coupang nav, logo, onboarding fix, smart orders, profile fix
+c3d1b17 docs: update Daily_Changes.md
 8eb832a fix: Telegram deep link + sign breaking OTP delivery
 43866f8 feat: auto-send OTP directly to Telegram DM
 8a944c9 feat: UI redesign, Sign Up/In flow, Groq AI, sidebar nav, green theme
