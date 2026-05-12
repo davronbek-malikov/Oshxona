@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   }
 
   const phone = "+" + user.email.replace("@oshxona.internal", "");
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
 
   const { data: dbUser } = await admin
     .from("users")

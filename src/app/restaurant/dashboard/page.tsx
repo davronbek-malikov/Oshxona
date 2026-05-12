@@ -202,6 +202,13 @@ export default function RestaurantDashboardPage() {
           <span className="text-3xl">🍽️</span>
           <span className="font-semibold text-sm">Menyu boshqarish</span>
         </Link>
+        <Link
+          href="/restaurant/riders"
+          className="bg-white rounded-2xl p-4 flex flex-col items-center gap-2 shadow-sm col-span-2"
+        >
+          <span className="text-3xl">🛵</span>
+          <span className="font-semibold text-sm">Kuryer so&apos;rovlari</span>
+        </Link>
       </div>
 
       {/* Recent orders */}

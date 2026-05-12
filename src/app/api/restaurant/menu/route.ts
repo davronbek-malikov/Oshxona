@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
 
   const { data, error } = await admin
     .from("menu_items")

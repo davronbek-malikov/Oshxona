@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    const supabase = await createAdminClient();
+    const supabase = createAdminClient();
 
     // Find OTP for this phone
     const { data: otp } = await supabase

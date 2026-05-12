@@ -7,6 +7,22 @@ const schema = z.object({
   language: z.enum(["uz", "en"]).optional(),
 });
 
+export async function GET() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user?.email?.endsWith("@oshxona.internal")) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const phone = "+" + user.email.replace("@oshxona.internal", "");
+  const admin = createAdminClient();
+
+  const { data } = await admin.from("users").select("*").eq("phone", phone).single();
+
+  return NextResponse.json({ user: data ?? null });
+}
+
 export async function PATCH(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -22,7 +38,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const phone = "+" + user.email.replace("@oshxona.internal", "");
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
 
   const { error } = await admin
     .from("users")

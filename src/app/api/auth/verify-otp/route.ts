@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const supabase = await createAdminClient();
+  const supabase = createAdminClient();
 
   // Find valid OTP
   const { data: otp } = await supabase

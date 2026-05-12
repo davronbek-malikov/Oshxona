@@ -18,7 +18,7 @@ export async function PATCH(
   }
 
   const phone = "+" + authUser.email.replace("@oshxona.internal", "");
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
 
   const { data: caller } = await admin
     .from("users")

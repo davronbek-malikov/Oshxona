@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   const code = generateCode();
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
-  const supabase = await createAdminClient();
+  const supabase = createAdminClient();
 
   // Invalidate old OTPs
   await supabase.from("phone_otps").update({ used: true }).eq("phone", phone).eq("used", false);

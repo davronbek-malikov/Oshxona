@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Yetkazib berish manzilini kiriting" }, { status: 400 });
   }
 
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
 
   // Derive customer_id server-side from the authenticated session
   const phone = "+" + user.email!.replace("@oshxona.internal", "");
@@ -93,6 +93,28 @@ export async function POST(req: NextRequest) {
     };
   });
 
+  // Calculate distance-based rider fee for delivery orders
+  let rider_fee_krw = 3000; // default
+  if (delivery_type === "delivery" && parsed.data.delivery_lat && parsed.data.delivery_lng) {
+    // Get restaurant location
+    const { data: rest } = await admin
+      .from("restaurants").select("location").eq("id", parsed.data.restaurant_id).single();
+    if (rest?.location) {
+      // Haversine distance (approximate)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const loc = rest.location as any;
+      const [rLng, rLat] = loc.coordinates ?? [0, 0];
+      const R = 6371;
+      const dLat = ((parsed.data.delivery_lat - rLat) * Math.PI) / 180;
+      const dLng = ((parsed.data.delivery_lng - rLng) * Math.PI) / 180;
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos((rLat * Math.PI) / 180) * Math.cos((parsed.data.delivery_lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+      const distanceKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      // ₩2,000 base + ₩500/km, rounded to nearest ₩500, min ₩3,000 max ₩15,000
+      rider_fee_krw = Math.min(15000, Math.max(3000, Math.round((2000 + distanceKm * 500) / 500) * 500));
+    }
+  }
+
   // Create order
   const { data: order, error: orderError } = await admin
     .from("orders")
@@ -103,6 +125,7 @@ export async function POST(req: NextRequest) {
       customer_id: dbUser.id,
       total_krw,
       status: "pending_payment",
+      ...(delivery_type === "delivery" ? { rider_fee_krw } : {}),
     })
     .select("id")
     .single();

@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const phone = "+" + user.email!.replace("@oshxona.internal", "");
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
 
   const { data: caller } = await admin
     .from("users").select("id").eq("phone", phone).single();

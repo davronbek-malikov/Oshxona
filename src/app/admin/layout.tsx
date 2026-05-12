@@ -10,7 +10,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (loading) return;
-    if (!user || user.role !== "admin") {
+    if (!user || (user.role !== "admin" && user.role !== "restaurant")) {
       router.replace("/menu");
     }
   }, [user, loading, router]);
@@ -23,7 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  if (user.role !== "admin") return null;
+  if (user.role !== "admin" && user.role !== "restaurant") return null;
 
   return (
     <div className="min-h-screen bg-gray-50">

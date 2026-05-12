@@ -17,7 +17,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
 
   const { data: order } = await admin
     .from("orders")

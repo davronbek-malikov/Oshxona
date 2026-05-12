@@ -72,7 +72,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Ma'lumotlar noto'g'ri" }, { status: 400 });
   }
 
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
 
   const owns = await assertOwnsMenuItem(admin, id, phone);
   if (!owns) {
@@ -101,7 +101,7 @@ export async function DELETE(
   if (!phone) return NextResponse.json({ error: "Noto'g'ri sessiya" }, { status: 401 });
 
   const { id } = await ctx.params;
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
 
   const owns = await assertOwnsMenuItem(admin, id, phone);
   if (!owns) {

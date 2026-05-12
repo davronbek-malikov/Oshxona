@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
 
   const { endpoint } = await req.json() as { endpoint?: string };
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
   const phone = "+" + user.email!.replace("@oshxona.internal", "");
 
   const { data: dbUser } = await admin

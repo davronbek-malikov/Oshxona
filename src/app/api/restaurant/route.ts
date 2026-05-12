@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   // Derive owner from authenticated session — never trust client-supplied owner_id
   const phone = "+" + user.email.replace("@oshxona.internal", "");
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
 
   const { data: dbUser } = await admin.from("users").select("id").eq("phone", phone).single();
   if (!dbUser) {

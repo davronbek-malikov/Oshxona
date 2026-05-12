@@ -49,12 +49,12 @@ export async function PATCH(
 
   const { id } = await ctx.params;
   const newStatus = parsed.data.status;
-  const admin = await createAdminClient();
+  const admin = createAdminClient();
 
   // Fetch the order and its restaurant
   const { data: order } = await admin
     .from("orders")
-    .select("status, restaurant_id, customer_id")
+    .select("status, restaurant_id, customer_id, delivery_type")
     .eq("id", id)
     .single();
 
@@ -99,30 +99,50 @@ export async function PATCH(
     .update({ status: newStatus })
     .eq("id", id);
 
+  // When delivery order becomes ready → mark it available for riders (separate update)
+  if (!error && newStatus === "ready" && order.delivery_type === "delivery") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (admin as any).from("orders").update({ rider_status: "waiting" }).eq("id", id);
+  }
+
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Send Web Push to customer (fire-and-forget — don't block the response)
+  // Fire-and-forget: push to customer + notify riders if delivery order is ready
   Promise.resolve().then(async () => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const adminAny = admin as any;
-      const [restaurantData, subsData] = await Promise.all([
-        admin.from("restaurants").select("name_uz").eq("id", order.restaurant_id!).single(),
-        adminAny.from("push_subscriptions").select("endpoint, p256dh, auth").eq("user_id", order.customer_id!),
-      ]);
-      if (subsData.data && subsData.data.length > 0) {
-        await sendOrderStatusPush(
-          subsData.data,
-          id,
-          restaurantData.data?.name_uz ?? "Restoran",
-          newStatus
-        );
+      const { data: restaurantData } = await admin
+        .from("restaurants").select("name_uz").eq("id", order.restaurant_id!).single();
+      const restName = restaurantData?.name_uz ?? "Restoran";
+
+      // Push to customer
+      const { data: custSubs } = await adminAny
+        .from("push_subscriptions").select("endpoint, p256dh, auth").eq("user_id", order.customer_id!);
+      if (custSubs?.length) {
+        await sendOrderStatusPush(custSubs, id, restName, newStatus);
       }
-    } catch {
-      // Ignore push errors — they must not affect the main response
-    }
+
+      // Push to all online riders when delivery order becomes available
+      if (newStatus === "ready" && order.delivery_type === "delivery") {
+        const { data: onlineRiders } = await adminAny
+          .from("delivery_riders")
+          .select("user_id")
+          .eq("status", "online")
+          .eq("is_approved", true)
+          .eq("is_blocked", false);
+        if (onlineRiders?.length) {
+          const userIds = onlineRiders.map((r: { user_id: string }) => r.user_id);
+          const { data: riderSubs } = await adminAny
+            .from("push_subscriptions").select("endpoint, p256dh, auth").in("user_id", userIds);
+          if (riderSubs?.length) {
+            await sendOrderStatusPush(riderSubs, id, restName, "ready");
+          }
+        }
+      }
+    } catch { /* ignore push errors */ }
   });
 
   return NextResponse.json({ success: true, status: newStatus });

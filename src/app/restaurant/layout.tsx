@@ -18,8 +18,11 @@ export default function RestaurantLayout({
 }) {
   const pathname = usePathname();
 
-  // Onboarding pages don't show the nav
-  const hideNav = pathname.startsWith("/restaurant/onboarding");
+  // These pages have their own full-page layout
+  const hideAll = pathname.startsWith("/restaurant/onboarding") || pathname.startsWith("/restaurant/riders");
+  const hideNav = hideAll;
+
+  if (hideAll) return <>{children}</>;
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
