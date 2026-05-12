@@ -115,8 +115,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Create order
-  const { data: order, error: orderError } = await admin
+  // Create order (cast as any — rider_fee_krw column exists in DB but not in generated types)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: order, error: orderError } = await (admin as any)
     .from("orders")
     .insert({
       ...rest,
