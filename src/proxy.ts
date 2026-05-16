@@ -47,7 +47,7 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Public routes — no auth required
-  const publicPaths = ["/login", "/verify", "/auth/callback", "/api/auth", "/api/telegram"];
+  const publicPaths = ["/login", "/verify", "/auth/callback", "/api/auth", "/api/telegram", "/setup-profile"];
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));
 
   if (!user && !isPublic) {

@@ -1,0 +1,1526 @@
+[2026-05-12T12:58:08.016Z] PROMPT
+============================================================
+Analyze this codebase for performance optimizations:
+- Identify N+1 query patterns
+- Find unnecessary re-renders in React
+- Suggest caching opportunities
+- Identify memory leaks
+- Find redundant computations
+
+Provide actionable suggestions with code examples.
+
+## Codebase Context
+
+--- src/app/api/admin/restaurants/[id]/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { z } from "zod";
+
+const schema = z.object({
+  action: z.enum(["approve", "reject"]),
+});
+
+export async function PATCH(
+  req: NextRequest,
+  ctx: RouteContext<"/api/admin/restaurants/[id]">
+) {
+  // Verify caller is admin
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const phone = "+" + authUser.email.replace("@oshxona.internal", "");
+  const admin = createAdminClient();
+
+  const { data: caller } = await admin
+    .from("users")
+    .select("role")
+    .eq("phone", phone)
+    .single();
+
+  if (caller?.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await ctx.params;
+  const body = await req.json();
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  }
+
+  const { action } = parsed.data;
+
+  const { error } = await admin
+    .from("restaurants")
+    .update(
+      action === "approve"
+        ? { is_approved: true, is_active: true }
+        : { is_approved: false, is_active: false }
+    )
+    .eq("id", id);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}
+
+
+--- src/app/api/admin/riders/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+
+export async function GET(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email?.endsWith("@oshxona.internal")) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  // Any authenticated internal user can manage riders (restaurant owner / app admin)
+  const admin = createAdminClient();
+
+  const filter = req.nextUrl.searchParams.get("filter") ?? "pending";
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query = (admin as any)
+    .from("delivery_riders")
+    .select("id, name, phone, vehicle, payment_method, bank_name, bank_account_number, bank_account_holder, is_approved, is_blocked, block_reason, penalty_krw, orders_completed, total_earnings_krw, status, created_at")
+    .order("created_at", { ascending: false });
+
+  if (filter === "pending") {
+    query = query.eq("is_approved", false);
+  } else if (filter === "approved") {
+    query = query.eq("is_approved", true);
+  }
+
+  const { data, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ riders: data ?? [] });
+}
+
+
+--- src/app/api/admin/riders/[id]/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { z } from "zod";
+
+const schema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("approve") }),
+  z.object({ action: z.literal("reject") }),
+  z.object({ action: z.literal("block"), reason: z.string().min(1) }),
+  z.object({ action: z.literal("unblock") }),
+  z.object({ action: z.literal("penalty"), amount: z.number().int().positive(), reason: z.string().optional() }),
+]);
+
+export async function PATCH(
+  req: NextRequest,
+  ctx: RouteContext<"/api/admin/riders/[id]">
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email?.endsWith("@oshxona.internal")) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Noto'g'ri so'rov" }, { status: 400 });
+  }
+
+  // Any authenticated internal user can manage riders
+  const admin = createAdminClient();
+
+  const { id } = await ctx.params;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminAny = admin as any;
+
+  let update: Record<string, unknown> = {};
+  const p = parsed.data;
+
+  if (p.action === "approve") {
+    update = { is_approved: true, is_blocked: false };
+  } else if (p.action === "reject") {
+    update = { is_approved: false };
+  } else if (p.action === "block") {
+    update = { is_blocked: true, block_reason: p.reason, status: "offline" };
+  } else if (p.action === "unblock") {
+    update = { is_blocked: false, block_reason: null };
+  } else if (p.action === "penalty") {
+    // Fetch current penalty and add to it
+    const { data: rider } = await adminAny.from("delivery_riders").select("penalty_krw").eq("id", id).single();
+    const current = rider?.penalty_krw ?? 0;
+    update = { penalty_krw: current + p.amount };
+  }
+
+  const { error } = await adminAny.from("delivery_riders").update(update).eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true, action: p.action });
+}
+
+
+--- src/app/api/ai/search/route.ts (truncated) ---
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+
+interface RestaurantContext {
+  type: "restaurants";
+  restaurants: Array<{
+    id: string;
+    name_uz: string;
+    name_en: string | null;
+    description: string | null;
+  }>;
+}
+
+interface MenuContext {
+  type: "menu";
+  restaurantId: string;
+  restaurantName: string;
+  items: Array<{
+    id: string;
+    name_uz: string;
+    name_en: string | null;
+    category: string | null;
+    price_krw: number;
+  }>;
+}
+
+interface SearchRequest {
+  query: string;
+  context: RestaurantContext | MenuContext;
+}
+
+interface MatchItem { id: string; name: string; price: number }
+interface Match { restaurantId: string; restaurantName: string; items: MatchItem[] }
+interface SearchResponse { reply: string; matches: Match[] }
+
+// ─── Detect which provider to use ─────────────────────────────────────────────
+type Provider = "groq" | "gemini";
+
+function detectProvider(): { provider: Provider; apiKey: string } | null {
+  if (process.env.GROQ_API_KEY) {
+    return { provider: "groq", apiKey: process.env.GROQ_API_KEY };
+  }
+  if (process.env.GOOGLE_GEMINI_API_KEY) {
+    return { provider: "gemini", apiKey: process.env.GOOGLE_GEMINI_API_KEY };
+  }
+  return null;
+}
+
+// ─── Shared system prompt ──────────────────────────────────────────────────────
+function buildPrompt(query: string, ctx: RestaurantContext | MenuContext): string {
+  const ctxJson =
+    ctx.type === "restaurants"
+      ? JSON.stringify(
+          ctx.restaurants.map((r) => ({
+            id: r.id,
+            name: r.name_uz + (r.name_en ? ` / ${r.name_en}` : ""),
+            description: r.description ?? "",
+          }))
+        )
+      : JSON.stringify(
+          ctx.items.map((i) => ({
+            id: i.id,
+            restaurantId: ctx.restaurantId,
+            restaurantName: ctx.restaurantName,
+            name: i.name_uz + (i.name_en ? ` / ${i.name_en}` : ""),
+            category: i.category ?? "",
+            price: i.price_krw,
+          }))
+        );
+
+  return `You are a food assistant for Oshxona, a halal Uzbek food app in South Korea.
+The user query may be in Uzbek, Korean, English, or Russian.
+Find the best matching ${ctx.type === "restaurants" ? "restaurants" : "menu items"}.
+
+User query: "${query}"
+
+Available ${ctx.type === "restaurants" ? "restaurants" : "menu items"}:
+${ctxJson}
+
+Respond ONLY with valid JSON (no markdown, no code blocks):
+{
+  "reply": "Short friendly response in the SAME language as the query (max 1 sentence)",
+  "matches": [
+    {
+      "restaurantId": "uuid",
+      "restaurantName": "name",
+      "items": [{ "id": "uuid", "name": "item name", "price": 12000 }]
+    }
+  ]
+}
+Rules: max 3 matches. If nothing found return {"reply":"...","matches":[]}.
+Understand food in Uzbek/Korean/English/Russian (kabob=케밥=кабоб, osh=плов=밥).`;
+}
+
+// ─── Groq (OpenAI-compatible, free) ───────────────────────────────────────────
+async function callGroq(prompt: string, apiKey: string): Promise<string> {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      max_tokens: 1024,
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("Groq error:", err);
+    throw new Error(`Groq API error ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? "";
+}
+
+// ─── Google Gemini ─────────────────────────────────────────────────────────────
+async function callGemini(prompt: string, apiKey: string): Promise<string> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("Gemini error:", err);
+    throw new Error(`Gemini API error ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+}
+
+// ─── Route handler ─────────────────────────────────────────────────────────────
+export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const providerConfig = detectProvider();
+  if (!providerConfig) {
+    return NextResponse.json(
+      { error: "AI search not configured. Add GROQ_API_KE
+
+--- src/app/api/auth/request-otp/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/server";
+import { z } from "zod";
+import { buildTelegramDeepLink, sendSms, getDeliveryMethod } from "@/lib/otp-delivery";
+
+const schema = z.object({
+  phone: z.string().min(8).max(20),
+});
+
+function generateCode(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+async function sendTelegramDirect(chatId: number, code: string): Promise<boolean> {
+  try {
+    const token = process.env.TELEGRAM_BOT_TOKEN!;
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        parse_mode: "HTML",
+        text: `🔐 <b>Oshxona tasdiqlash kodi:</b>\n\n<code>${code}</code>\n\nBu kod 5 daqiqa amal qiladi.\n\nYour verification code: <code>${code}</code>`,
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const parsed = schema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid phone number" }, { status: 400 });
+  }
+
+  const { phone } = parsed.data;
+  const code = generateCode();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+  const supabase = createAdminClient();
+
+  // Invalidate old OTPs
+  await supabase.from("phone_otps").update({ used: true }).eq("phone", phone).eq("used", false);
+
+  // Save new OTP
+  const { error } = await supabase.from("phone_otps").insert({ phone, code, expires_at: expiresAt });
+  if (error) {
+    console.error("OTP insert error:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+
+  // SMS mode
+  if (getDeliveryMethod() === "sms") {
+    try {
+      await sendSms(phone, code);
+      await supabase.from("phone_otps").update({ delivered: true }).eq("phone", phone).eq("code", code);
+    } catch (err) {
+      console.error("SMS send error:", err);
+      return NextResponse.json({ error: "Failed to send SMS" }, { status: 500 });
+    }
+    return NextResponse.json({ method: "sms" });
+  }
+
+  // Telegram mode — check if user already has telegram_user_id saved
+  const { data: existingUser } = await supabase
+    .from("users")
+    .select("telegram_user_id")
+    .eq("phone", phone)
+    .single();
+
+  if (existingUser?.telegram_user_id) {
+    // ✅ User already started the bot before — send code DIRECTLY to their Telegram
+    const sent = await sendTelegramDirect(Number(existingUser.telegram_user_id), code);
+
+    if (sent) {
+      await supabase.from("phone_otps").update({ delivered: true }).eq("phone", phone).eq("code", code);
+      // In dev: also return code for testing
+      if (process.env.NODE_ENV === "development") {
+        return NextResponse.json({ method: "telegram", autoSent: true, devCode: code });
+      }
+      return NextResponse.json({ method: "telegram", autoSent: true });
+    }
+    // If direct send failed (user blocked bot etc.) — fall through to deeplink
+  }
+
+  // First time user — needs to open bot once to link their Telegram account
+  const deepLink = buildTelegramDeepLink(phone);
+
+  if (process.env.NODE_ENV === "development") {
+    return NextResponse.json({ method: "telegram", deepLink, devCode: code });
+  }
+
+  return NextResponse.json({ method: "telegram", deepLink });
+}
+
+
+--- src/app/api/auth/verify-otp/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/server";
+import { z } from "zod";
+
+const schema = z.object({
+  phone: z.string().min(8).max(20),
+  code: z.string().length(6),
+});
+
+// In-memory brute-force guard: {phone -> {attempts, lockedUntil}}
+// Resets on server restart; good enough for MVP (use Redis for multi-region production)
+const failMap = new Map<string, { attempts: number; lockedUntil: number }>();
+const MAX_ATTEMPTS = 5;
+const LOCK_MS = 15 * 60 * 1000; // 15 minutes
+
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const parsed = schema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Ma'lumotlar noto'g'ri" }, { status: 400 });
+  }
+
+  const { phone, code } = parsed.data;
+
+  // Check lockout
+  const entry = failMap.get(phone);
+  if (entry) {
+    if (Date.now() < entry.lockedUntil) {
+      const minutesLeft = Math.ceil((entry.lockedUntil - Date.now()) / 60000);
+      return NextResponse.json(
+        { error: `Juda ko'p urinish. ${minutesLeft} daqiqadan so'ng urinib ko'ring.` },
+        { status: 429 }
+      );
+    }
+    // Lock expired — clear it
+    if (entry.attempts >= MAX_ATTEMPTS) {
+      failMap.delete(phone);
+    }
+  }
+
+  const supabase = createAdminClient();
+
+  // Find valid OTP
+  const { data: otp } = await supabase
+    .from("phone_otps")
+    .select("id, code, expires_at, used")
+    .eq("phone", phone)
+    .eq("used", false)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!otp) {
+    // Count this as a failed attempt
+    const cur = failMap.get(phone) ?? { attempts: 0, lockedUntil: 0 };
+    cur.attempts += 1;
+    if (cur.attempts >= MAX_ATTEMPTS) {
+      cur.lockedUntil = Date.now() + LOCK_MS;
+    }
+    failMap.set(phone, cur);
+    return NextResponse.json({ error: "Kod noto'g'ri yoki topilmadi" }, { status: 400 });
+  }
+
+  if (new Date(otp.expires_at) < new Date()) {
+    return NextResponse.json({ error: "Kod muddati tugagan. Qayta so'rang." }, { status: 400 });
+  }
+
+  // Constant-time code comparison to avoid timing attacks
+  const expectedCode = otp.code.padEnd(6, " ");
+  const providedCode = code.padEnd(6, " ");
+  let mismatch = 0;
+  for (let i = 0; i < 6; i++) {
+    mismatch |= expectedCode.charCodeAt(i) ^ providedCode.charCodeAt(i);
+  }
+
+  if (mismatch !== 0) {
+    const cur = failMap.get(phone) ?? { attempts: 0, lockedUntil: 0 };
+    cur.attempts += 1;
+    if (cur.attempts >= MAX_ATTEMPTS) {
+      cur.lockedUntil = Date.now() + LOCK_MS;
+    }
+    failMap.set(phone, cur);
+    return NextResponse.json({ error: "Kod noto'g'ri yoki topilmadi" }, { status: 400 });
+  }
+
+  // Code correct — clear lockout, mark used
+  failMap.delete(phone);
+  await supabase.from("phone_otps").update({ used: true }).eq("id", otp.id);
+
+  // Upsert user
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .upsert({ phone, role: "customer", language: "uz" }, { onConflict: "phone" })
+    .select()
+    .single();
+
+  if (userError || !user) {
+    console.error("User upsert error:", userError);
+    return NextResponse.json({ error: "Foydalanuvchi yaratib bo'lmadi" }, { status: 500 });
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const { data: sessionData, error: signInError } =
+    await supabase.auth.admin.generateLink({
+      type: "magiclink",
+      email: `${phone.replace("+", "").replace(/\s/g, "")}@oshxona.internal`,
+      options: { redirectTo: `${appUrl}/auth/callback` },
+    });
+
+  if (signInError || !sessionData?.properties?.hashed_token) {
+    console.error("Session error:", signInError);
+    return NextResponse.json({ error: "Sessiya yaratib bo'lmadi" }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    user: {
+      id: user.id,
+      phone: user.phone,
+      role: user.role,
+      name: user.name,
+      language: user.language,
+    },
+    tokenHash: sessionData.properties.hashed_token,
+  });
+}
+
+
+--- src/app/api/orders/route.ts (truncated) ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { z } from "zod";
+
+const orderItemSchema = z.object({
+  menu_item_id: z.string().uuid(),
+  quantity: z.number().int().min(1),
+});
+
+const schema = z.object({
+  restaurant_id: z.string().uuid(),
+  items: z.array(orderItemSchema).min(1),
+  delivery_type: z.enum(["pickup", "delivery"]).default("pickup"),
+  delivery_address: z.string().optional().nullable(),
+  delivery_lat: z.number().optional().nullable(),
+  delivery_lng: z.number().optional().nullable(),
+  customer_note: z.string().optional().nullable(),
+  payment_receipt_url: z.string().optional().nullable(),
+});
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Ma'lumotlar noto'g'ri", details: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
+
+  const { items, delivery_type, delivery_address, ...rest } = parsed.data;
+
+  // Enforce delivery_address when delivery_type === "delivery"
+  if (delivery_type === "delivery" && !delivery_address?.trim()) {
+    return NextResponse.json({ error: "Yetkazib berish manzilini kiriting" }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+
+  // Derive customer_id server-side from the authenticated session
+  const phone = "+" + user.email!.replace("@oshxona.internal", "");
+  const { data: dbUser } = await admin
+    .from("users")
+    .select("id")
+    .eq("phone", phone)
+    .single();
+
+  if (!dbUser) {
+    return NextResponse.json({ error: "Foydalanuvchi topilmadi" }, { status: 400 });
+  }
+
+  // Fetch authoritative prices server-side — never trust client-supplied prices
+  const itemIds = items.map((i) => i.menu_item_id);
+  const { data: menuItems, error: menuError } = await admin
+    .from("menu_items")
+    .select("id, price_krw, is_available, sold_out_today, restaurant_id")
+    .in("id", itemIds);
+
+  if (menuError || !menuItems) {
+    return NextResponse.json({ error: "Menu ma'lumotlari topilmadi" }, { status: 400 });
+  }
+
+  // Verify all items belong to the requested restaurant
+  const wrongRestaurant = menuItems.some((m) => m.restaurant_id !== parsed.data.restaurant_id);
+  if (wrongRestaurant) {
+    return NextResponse.json({ error: "Noto'g'ri restoran" }, { status: 400 });
+  }
+
+  // Check availability
+  const unavailable = menuItems.filter((m) => !m.is_available || m.sold_out_today);
+  if (unavailable.length > 0) {
+    return NextResponse.json({ error: "Ba'zi mahsulotlar mavjud emas" }, { status: 400 });
+  }
+
+  // Build price map and compute total server-side
+  const priceMap = new Map(menuItems.map((m) => [m.id, m.price_krw]));
+  let total_krw = 0;
+  const orderItems = items.map((item) => {
+    const price = priceMap.get(item.menu_item_id) ?? 0;
+    total_krw += price * item.quantity;
+    return {
+      menu_item_id: item.menu_item_id,
+      quantity: item.quantity,
+      price_at_order: price,
+    };
+  });
+
+  // Calculate distance-based rider fee for delivery orders
+  let rider_fee_krw = 3000; // default
+  if (delivery_type === "delivery" && parsed.data.delivery_lat && parsed.data.delivery_lng) {
+    // Get restaurant location
+    const { data: rest } = await admin
+      .from("restaurants").select("location").eq("id", parsed.data.restaurant_id).single();
+    if (rest?.location) {
+      // Haversine distance (approximate)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const loc = rest.location as any;
+      const [rLng, rLat] = loc.coordinates ?? [0, 0];
+      const R = 6371;
+      const dLat = ((parsed.data.delivery_lat - rLat) * Math.PI) / 180;
+      const dLng = ((parsed.data.delivery_lng - rLng) * Math.PI) / 180;
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos((rLat * Math.PI) / 180) * Math.cos((parsed.data.delivery_lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+      const distanceKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      // ₩2,000 base + ₩500/km, rounded to nearest ₩500, min ₩3,000 max ₩15,000
+      rider_fee_krw = Math.min(15000, Math.max(3000, Math.round((2000 + distanceKm * 500) / 500) * 500));
+    }
+  }
+
+  // Create order (cast as any — rider_fee_krw column exists in DB but not in generated types)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: order, error: orderError } = await (admin as any)
+    .from("orders")
+    .insert({
+      ...rest,
+      delivery_type,
+      delivery_address: delivery_address ?? null,
+      customer_id: dbUser.id,
+      total_krw,
+      status: "pending_payment",
+      ...(delivery_type === "delivery" ? { rider_fee_krw } : {}),
+    })
+    .select("id")
+    .single();
+
+  if (orderError || !o
+
+--- src/app/api/orders/[id]/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+
+export async function PATCH(
+  req: NextRequest,
+  ctx: RouteContext<"/api/orders/[id]">
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await ctx.params;
+  const { status } = await req.json();
+
+  // Customers may only cancel their own pending_payment orders
+  if (status !== "cancelled") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const admin = createAdminClient();
+
+  const { data: order } = await admin
+    .from("orders")
+    .select("customer_id, status")
+    .eq("id", id)
+    .single();
+
+  if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const phone = "+" + user.email!.replace("@oshxona.internal", "");
+  const { data: caller } = await admin.from("users").select("id").eq("phone", phone).single();
+
+  if (order.customer_id !== caller?.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  if (order.status !== "pending_payment") {
+    return NextResponse.json(
+      { error: "Can only cancel orders awaiting payment" },
+      { status: 400 }
+    );
+  }
+
+  await admin.from("orders").update({ status: "cancelled" }).eq("id", id);
+  return NextResponse.json({ success: true });
+}
+
+
+--- src/app/api/orders/[id]/track/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+
+export async function GET(
+  _req: NextRequest,
+  ctx: RouteContext<"/api/orders/[id]/track">
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email?.endsWith("@oshxona.internal")) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const { id } = await ctx.params;
+  const admin = createAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminAny = admin as any;
+
+  const { data: order } = await adminAny.from("orders")
+    .select("id, status, rider_status, rider_id, delivery_lat, delivery_lng, delivery_address, restaurant_id")
+    .eq("id", id).single();
+
+  if (!order) return NextResponse.json({ error: "Buyurtma topilmadi" }, { status: 404 });
+
+  let rider = null;
+  if (order.rider_id) {
+    const { data: riderData } = await adminAny.from("delivery_riders")
+      .select("id, name, phone, vehicle, current_lat, current_lng, status")
+      .eq("id", order.rider_id).single();
+    rider = riderData;
+  }
+
+  const { data: restaurant } = await admin.from("restaurants")
+    .select("name_uz, address, location").eq("id", order.restaurant_id!).single();
+
+  return NextResponse.json({ order, rider, restaurant });
+}
+
+
+--- src/app/api/push/subscribe/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+
+  if (!user.email?.endsWith("@oshxona.internal")) {
+    return NextResponse.json({ error: "Noto'g'ri sessiya" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const { endpoint, keys } = body as {
+    endpoint: string;
+    keys: { p256dh: string; auth: string };
+  };
+
+  if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    return NextResponse.json({ error: "Noto'g'ri obuna ma'lumotlari" }, { status: 400 });
+  }
+
+  const phone = "+" + user.email.replace("@oshxona.internal", "");
+  const admin = createAdminClient();
+
+  const { data: dbUser } = await admin
+    .from("users")
+    .select("id")
+    .eq("phone", phone)
+    .single();
+
+  if (!dbUser) return NextResponse.json({ error: "Foydalanuvchi topilmadi" }, { status: 400 });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (admin as any).from("push_subscriptions").upsert(
+    { user_id: dbUser.id, endpoint, p256dh: keys.p256dh, auth: keys.auth },
+    { onConflict: "user_id,endpoint" }
+  );
+
+  return NextResponse.json({ success: true });
+}
+
+
+--- src/app/api/push/unsubscribe/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+
+  const { endpoint } = await req.json() as { endpoint?: string };
+  const admin = createAdminClient();
+  const phone = "+" + user.email!.replace("@oshxona.internal", "");
+
+  const { data: dbUser } = await admin
+    .from("users")
+    .select("id")
+    .eq("phone", phone)
+    .single();
+
+  if (!dbUser) return NextResponse.json({ error: "Foydalanuvchi topilmadi" }, { status: 400 });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminAny = admin as any;
+  if (endpoint) {
+    await adminAny.from("push_subscriptions").delete().eq("user_id", dbUser.id).eq("endpoint", endpoint);
+  } else {
+    await adminAny.from("push_subscriptions").delete().eq("user_id", dbUser.id);
+  }
+
+  return NextResponse.json({ success: true });
+}
+
+
+--- src/app/api/ratings/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { z } from "zod";
+
+const schema = z.object({
+  order_id:      z.string().uuid(),
+  restaurant_id: z.string().uuid(),
+  stars:         z.number().int().min(1).max(5),
+  comment:       z.string().optional().nullable(),
+});
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const phone = "+" + user.email!.replace("@oshxona.internal", "");
+  const admin = createAdminClient();
+
+  const { data: caller } = await admin
+    .from("users").select("id").eq("phone", phone).single();
+  if (!caller) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+  const body = await req.json();
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid data" }, { status: 400 });
+  }
+
+  const { order_id, restaurant_id, stars, comment } = parsed.data;
+
+  // Verify the order belongs to this customer and is delivered
+  const { data: order } = await admin
+    .from("orders")
+    .select("customer_id, status")
+    .eq("id", order_id)
+    .single();
+
+  if (!order || order.customer_id !== caller.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  if (order.status !== "delivered") {
+    return NextResponse.json({ error: "Can only rate delivered orders" }, { status: 400 });
+  }
+
+  const { error } = await admin.from("ratings").upsert(
+    { order_id, customer_id: caller.id, restaurant_id, stars, comment: comment ?? null },
+    { onConflict: "order_id" }
+  );
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}
+
+
+--- src/app/api/restaurant/menu/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { z } from "zod";
+
+const schema = z.object({
+  restaurant_id: z.string().uuid(),
+  name_uz: z.string().min(2),
+  name_en: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+  category: z.enum([
+    "tovuq",
+    "kabob",
+    "somsa",
+    "osh",
+    "salat",
+    "ichimlik",
+    "shirinlik",
+  ]),
+  price_krw: z.number().min(100),
+  photo_url: z.string().optional().nullable(),
+});
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Ma'lumotlar noto'g'ri", details: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
+
+  const admin = createAdminClient();
+
+  const { data, error } = await admin
+    .from("menu_items")
+    .insert({
+      ...parsed.data,
+      is_available: true,
+      sold_out_today: false,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ id: data.id });
+}
+
+
+--- src/app/api/restaurant/menu/[id]/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { z } from "zod";
+
+const updateSchema = z.object({
+  name_uz: z.string().min(2).optional(),
+  name_en: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+  category: z
+    .enum(["tovuq", "kabob", "somsa", "osh", "salat", "ichimlik", "shirinlik"])
+    .optional(),
+  price_krw: z.number().min(100).optional(),
+  photo_url: z.string().optional().nullable(),
+  is_available: z.boolean().optional(),
+  sold_out_today: z.boolean().optional(),
+});
+
+async function getCallerPhone(user: { email?: string | null }): Promise<string | null> {
+  if (!user.email?.endsWith("@oshxona.internal")) return null;
+  return "+" + user.email.replace("@oshxona.internal", "");
+}
+
+async function assertOwnsMenuItem(
+  adminClient: Awaited<ReturnType<typeof createAdminClient>>,
+  menuItemId: string,
+  callerPhone: string
+): Promise<boolean> {
+  // Step 1: get the restaurant_id that owns this menu item
+  const { data: item } = await adminClient
+    .from("menu_items")
+    .select("restaurant_id")
+    .eq("id", menuItemId)
+    .single();
+
+  if (!item) return false;
+
+  // Step 2: verify the caller owns that restaurant
+  const { data: restaurant } = await adminClient
+    .from("restaurants")
+    .select("owner_id")
+    .eq("id", item.restaurant_id)
+    .single();
+
+  if (!restaurant) return false;
+
+  const { data: dbUser } = await adminClient
+    .from("users")
+    .select("id")
+    .eq("phone", callerPhone)
+    .single();
+
+  return dbUser != null && restaurant.owner_id === dbUser.id;
+}
+
+export async function PATCH(
+  req: NextRequest,
+  ctx: RouteContext<"/api/restaurant/menu/[id]">
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const phone = await getCallerPhone(user);
+  if (!phone) return NextResponse.json({ error: "Noto'g'ri sessiya" }, { status: 401 });
+
+  const { id } = await ctx.params;
+  const body = await req.json();
+  const parsed = updateSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Ma'lumotlar noto'g'ri" }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+
+  const owns = await assertOwnsMenuItem(admin, id, phone);
+  if (!owns) {
+    return NextResponse.json({ error: "Ruxsat yo'q" }, { status: 403 });
+  }
+
+  const { error } = await admin.from("menu_items").update(parsed.data).eq("id", id);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  ctx: RouteContext<"/api/restaurant/menu/[id]">
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const phone = await getCallerPhone(user);
+  if (!phone) return NextResponse.json({ error: "Noto'g'ri sessiya" }, { status: 401 });
+
+  const { id } = await ctx.params;
+  const admin = createAdminClient();
+
+  const owns = await assertOwnsMenuItem(admin, id, phone);
+  if (!owns) {
+    return NextResponse.json({ error: "Ruxsat yo'q" }, { status: 403 });
+  }
+
+  const { error } = await admin.from("menu_items").delete().eq("id", id);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}
+
+
+--- src/app/api/restaurant/orders/[id]/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { z } from "zod";
+import type { Database } from "@/types/database";
+import { sendOrderStatusPush } from "@/lib/push";
+
+type OrderStatus = Database["public"]["Tables"]["orders"]["Row"]["status"];
+
+// Valid forward transitions for restaurant owner
+const ALLOWED_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
+  pending_payment:   ["payment_confirmed", "cancelled"],
+  payment_claimed:   ["payment_confirmed", "cancelled"],
+  payment_confirmed: ["preparing", "cancelled"],
+  preparing:         ["ready", "cancelled"],
+  ready:             ["delivered"],
+};
+
+const schema = z.object({
+  status: z.enum([
+    "pending_payment",
+    "payment_claimed",
+    "payment_confirmed",
+    "preparing",
+    "ready",
+    "delivered",
+    "cancelled",
+  ]),
+});
+
+export async function PATCH(
+  req: NextRequest,
+  ctx: RouteContext<"/api/restaurant/orders/[id]">
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  if (!user.email?.endsWith("@oshxona.internal")) {
+    return NextResponse.json({ error: "Noto'g'ri sessiya" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Noto'g'ri status" }, { status: 400 });
+  }
+
+  const { id } = await ctx.params;
+  const newStatus = parsed.data.status;
+  const admin = createAdminClient();
+
+  // Fetch the order and its restaurant
+  const { data: order } = await admin
+    .from("orders")
+    .select("status, restaurant_id, customer_id, delivery_type")
+    .eq("id", id)
+    .single();
+
+  if (!order) {
+    return NextResponse.json({ error: "Buyurtma topilmadi" }, { status: 404 });
+  }
+
+  // Verify transition is allowed
+  const allowed = ALLOWED_TRANSITIONS[order.status as OrderStatus] ?? [];
+  if (!allowed.includes(newStatus)) {
+    return NextResponse.json(
+      { error: `${order.status} → ${newStatus} o'tish mumkin emas` },
+      { status: 400 }
+    );
+  }
+
+  // Verify the caller owns the restaurant
+  const phone = "+" + user.email.replace("@oshxona.internal", "");
+  const { data: dbUser } = await admin
+    .from("users")
+    .select("id")
+    .eq("phone", phone)
+    .single();
+
+  if (!dbUser) {
+    return NextResponse.json({ error: "Foydalanuvchi topilmadi" }, { status: 400 });
+  }
+
+  const { data: restaurant } = await admin
+    .from("restaurants")
+    .select("owner_id")
+    .eq("id", order.restaurant_id!)
+    .single();
+
+  if (!restaurant || restaurant.owner_id !== dbUser.id) {
+    return NextResponse.json({ error: "Ruxsat yo'q" }, { status: 403 });
+  }
+
+  // Apply the update
+  const { error } = await admin
+    .from("orders")
+    .update({ status: newStatus })
+    .eq("id", id);
+
+  // When delivery order becomes ready → mark it available for riders (separate update)
+  if (!error && newStatus === "ready" && order.delivery_type === "delivery") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (admin as any).from("orders").update({ rider_status: "waiting" }).eq("id", id);
+  }
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Fire-and-forget: push to customer + notify riders if delivery order is ready
+  Promise.resolve().then(async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const adminAny = admin as any;
+      const { data: restaurantData } = await admin
+        .from("restaurants").select("name_uz").eq("id", order.restaurant_id!).single();
+      const restName = restaurantData?.name_uz ?? "Restoran";
+
+      // Push to customer
+      const { data: custSubs } = await adminAny
+        .from("push_subscriptions").select("endpoint, p256dh, auth").eq("user_id", order.customer_id!);
+      if (custSubs?.length) {
+        await sendOrderStatusPush(custSubs, id, restName, newStatus);
+      }
+
+      // Push to all online riders when delivery order becomes available
+      if (newStatus === "ready" && order.delivery_type === "delivery") {
+        const { data: onlineRiders } = await adminAny
+          .from("delivery_riders")
+          .select("user_id")
+          .eq("status", "online")
+          .eq("is_approved", true)
+          .eq("is_blocked", false);
+        if (onlineRiders?.length) {
+          const userIds = onlineRiders.map((r: { user_id: string }) => r.user_id);
+          const { data: riderSubs } = await adminAny
+            .from("push_subscriptions").select("endpoint, p256dh, auth").in("user_id", userIds);
+          if (riderSubs?.length) {
+            await sendOrderStatusPush(riderSubs, id, restName, "ready");
+          }
+        }
+      }
+    } catch { /* ignore push errors */ }
+  });
+
+  return NextResponse.json({ success: true, status: newStatus });
+}
+
+
+--- src/app/api/restaurant/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { z } from "zod";
+
+const schema = z.object({
+  name_uz: z.string().min(2),
+  name_en: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+  opening_time: z.string(),
+  closing_time: z.string(),
+  phone: z.string(),
+  address: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+  bank_name: z.string(),
+  bank_account_number: z.string(),
+  bank_account_holder: z.string(),
+  halal_cert_url: z.string().optional().nullable(),
+  photos: z.array(z.string()).default([]),
+});
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email?.endsWith("@oshxona.internal")) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Ma'lumotlar noto'g'ri", details: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
+
+  // Derive owner from authenticated session — never trust client-supplied owner_id
+  const phone = "+" + user.email.replace("@oshxona.internal", "");
+  const admin = createAdminClient();
+
+  const { data: dbUser } = await admin.from("users").select("id").eq("phone", phone).single();
+  if (!dbUser) {
+    return NextResponse.json({ error: "Foydalanuvchi topilmadi" }, { status: 400 });
+  }
+
+  const { lat, lng, ...rest } = parsed.data;
+
+  // Check if restaurant already exists for this owner
+  const { data: existing } = await admin
+    .from("restaurants")
+    .select("id")
+    .eq("owner_id", dbUser.id)
+    .single();
+
+  if (existing) {
+    const { error } = await admin
+      .from("restaurants")
+      .update({ ...rest, location: `POINT(${lng} ${lat})` })
+      .eq("id", existing.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ id: existing.id, updated: true });
+  }
+
+  // Create new restaurant (is_approved = false — requires admin approval)
+  const { data, error } = await admin
+    .from("restaurants")
+    .insert({
+      ...rest,
+      owner_id: dbUser.id,
+      location: `POINT(${lng} ${lat})`,
+      is_approved: false,
+      is_active: true,
+    })
+    .select("id")
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Promote user role to restaurant
+  await admin.from("users").update({ role: "restaurant" }).eq("id", dbUser.id);
+
+  return NextResponse.json({ id: data.id, created: true });
+}
+
+
+--- src/app/api/rider/earnings/route.ts ---
+import { NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+
+export async function GET() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email?.endsWith("@oshxona.internal")) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const phone = "+" + user.email.replace("@oshxona.internal", "");
+  const admin = createAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminAny = admin as any;
+
+  const { data: dbUser } = await admin.from("users").select("id").eq("phone", phone).single();
+  if (!dbUser) return NextResponse.json({ deliveries: [] });
+
+  const { data: rider } = await adminAny.from("delivery_riders")
+    .select("id").eq("user_id", dbUser.id).single();
+  if (!rider) return NextResponse.json({ deliveries: [] });
+
+  const { data: deliveries } = await adminAny
+    .from("rider_deliveries")
+    .select("id, fee_krw, distance_km, delivered_at, order_id")
+    .eq("rider_id", rider.id)
+    .order("delivered_at", { ascending: false })
+    .limit(50);
+
+  return NextResponse.json({ deliveries: deliveries ?? [] });
+}
+
+
+--- src/app/api/rider/location/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+
+export async function PATCH(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email?.endsWith("@oshxona.internal")) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const { lat, lng } = await req.json();
+  if (typeof lat !== "number" || typeof lng !== "number") {
+    return NextResponse.json({ error: "lat/lng kerak" }, { status: 400 });
+  }
+
+  const phone = "+" + user.email.replace("@oshxona.internal", "");
+  const admin = createAdminClient();
+
+  const { data: dbUser } = await admin.from("users").select("id").eq("phone", phone).single();
+  if (!dbUser) return NextResponse.json({ error: "Foydalanuvchi topilmadi" }, { status: 400 });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (admin as any).from("delivery_riders")
+    .update({ current_lat: lat, current_lng: lng })
+    .eq("user_id", dbUser.id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}
+
+
+--- src/app/api/rider/orders/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+
+export async function GET(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email?.endsWith("@oshxona.internal")) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const phone = "+" + user.email.replace("@oshxona.internal", "");
+  const admin = createAdminClient();
+  const { data: dbUser } = await admin.from("users").select("id").eq("phone", phone).single();
+  if (!dbUser) return NextResponse.json({ error: "Foydalanuvchi topilmadi" }, { status: 400 });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminAny = admin as any;
+
+  const { data: rider } = await adminAny.from("delivery_riders")
+    .select("id, status, is_approved, is_blocked, block_reason, name, phone, vehicle, payment_method, bank_name, bank_account_number, total_earnings_krw, orders_completed, penalty_krw")
+    .eq("user_id", dbUser.id).single();
+
+  if (!rider) return NextResponse.json({ error: "Rider topilmadi" }, { status: 404 });
+
+  if (!rider.is_approved) {
+    return NextResponse.json({ error: "Pending approval", pending: true }, { status: 403 });
+  }
+
+  if (rider.is_blocked) {
+    return NextResponse.json({ error: "Bloklangan", blocked: true, reason: rider.block_reason }, { status: 403 });
+  }
+
+  const type = req.nextUrl.searchParams.get("type") ?? "available";
+
+  if (type === "available") {
+    // Available delivery orders: ready, delivery type, no rider assigned
+    const { data: orders } = await adminAny
+      .from("orders")
+      .select(`
+        id, total_krw, rider_fee_krw, delivery_address, delivery_lat, delivery_lng,
+        customer_note, created_at, status, rider_status,
+        restaurants(id, name_uz, address, phone, bank_name, bank_account_number, bank_account_holder),
+        order_items(id, quantity, price_at_order, menu_items(name_uz))
+      `)
+      .eq("status", "ready")
+      .eq("delivery_type", "delivery")
+      .is("rider_id", null)
+      .order("created_at", { ascending: true })
+      .limit(20);
+    return NextResponse.json({ orders: orders ?? [], rider });
+  }
+
+  if (type === "mine") {
+    const { data: orders } = await adminAny
+      .from("orders")
+      .select(`
+        id, total_krw, rider_fee_krw, delivery_address, created_at, status, rider_status,
+        restaurants(id, name_uz, address, phone),
+        order_items(id, quantity, price_at_order, menu_items(name_uz))
+      `)
+      .eq("rider_id", rider.id)
+      .in("rider_status", ["accepted", "picked_up"])
+      .order("created_at", { ascending: false });
+    return NextResponse.json({ orders: orders ?? [], rider });
+  }
+
+  if (type === "done") {
+    const { data: orders } = await adminAny
+      .from("orders")
+      .select(`id, total_krw, rider_fee_krw, delivery_address, created_at, status, rider_status, restaurants(name_uz)`)
+      .eq("rider_id", rider.id)
+      .eq("rider_status", "delivered")
+      .order("created_at", { ascending: false })
+      .limit(30);
+    return NextResponse.json({ orders: orders ?? [], rider });
+  }
+
+  return NextResponse.json({ orders: [], rider });
+}
+
+
+--- src/app/api/rider/orders/[id]/detail/route.ts ---
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+
+export async function GET(
+  _req: NextRequest,
+  ctx: RouteContext<"/api/rider/orders/[id]/detail">
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email?.endsWith("@oshxona.internal")) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const { id } = await ctx.params;
+  const admin = createAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminAny = admin as any;
+
+  const { data: order } = await adminAny.from("orders").select(`
+    id, total_krw, rider_fee_krw, delivery_address, delivery_lat, delivery_lng,
+    customer_note, customer_id, created_at, status, rider_status, rider_id,
+    restaurants(id, name_uz, address, phone, bank_name, bank_account_number),
+    order_items(id, quantity, price_at_order, menu_items(name_uz))
+  `).eq("id", id).single();
+
+  if (!order) return NextResponse.json({ error: "Buyurtma topilmadi" }, { status: 404 });
+
+  // Fetch customer phone via admin client (bypasses RLS)
+  let customer_phone: string | null = null;
+  if (order.customer_id) {
+    const { data: cu } = await admin.from("users").select("phone").eq("id", order.customer_id).single();
+    customer_phone = cu?.phone ?? null;
+  }
+
+  return NextResponse.json({ ...order, customer_phone });
+}
+
+
+## Instructions
+
+Analyze the above codebase context and provide your response following the format specified in the task.

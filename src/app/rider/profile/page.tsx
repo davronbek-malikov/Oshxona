@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useLanguage } from "@/context/LanguageContext";
+import { RiderNav } from "@/components/rider/RiderNav";
 
 interface Delivery {
   id: string;
@@ -225,20 +226,7 @@ export default function RiderProfilePage() {
         </button>
       </div>
 
-      {/* Bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-50">
-        <div className="max-w-[640px] mx-auto flex h-[62px]">
-          {[
-            { href: "/rider/orders", icon: "📋", label: uz ? "Buyurtmalar" : "Orders", active: false },
-            { href: "/rider/profile", icon: "👤", label: uz ? "Profil" : "Profile", active: true },
-          ].map(({ href, icon, label, active }) => (
-            <a key={href} href={href} className="flex-1 flex flex-col items-center justify-center gap-1">
-              <span className="text-xl">{icon}</span>
-              <span className={`text-[11px] font-bold ${active ? "text-[#F97316]" : "text-gray-400"}`}>{label}</span>
-            </a>
-          ))}
-        </div>
-      </nav>
+      <RiderNav active="profile" />
     </div>
   );
 }

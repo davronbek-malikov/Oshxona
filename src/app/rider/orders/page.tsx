@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/context/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
+import { RiderNav } from "@/components/rider/RiderNav";
 
 type Tab = "available" | "mine" | "done";
 
@@ -241,21 +242,7 @@ export default function RiderOrdersPage() {
         ))}
       </div>
 
-      {/* Bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-50">
-        <div className="max-w-[640px] mx-auto flex h-[62px]">
-          {[
-            { href: "/rider/orders", icon: "📋", label: lang === "uz" ? "Buyurtmalar" : "Orders", active: true },
-            { href: "/rider/profile", icon: "👤", label: lang === "uz" ? "Profil" : "Profile", active: false },
-          ].map(({ href, icon, label, active }) => (
-            <Link key={href} href={href}
-              className="flex-1 flex flex-col items-center justify-center gap-1">
-              <span className="text-xl">{icon}</span>
-              <span className={`text-[11px] font-bold ${active ? "text-[#F97316]" : "text-gray-400"}`}>{label}</span>
-            </Link>
-          ))}
-        </div>
-      </nav>
+      <RiderNav active="orders" />
     </div>
   );
 }

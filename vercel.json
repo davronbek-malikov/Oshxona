@@ -1,6 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/payout",
+      "schedule": "0 23 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/sw.js",

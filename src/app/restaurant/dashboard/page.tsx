@@ -202,10 +202,17 @@ export default function RestaurantDashboardPage() {
         </Link>
         <Link
           href="/restaurant/riders"
-          className="bg-white rounded-2xl p-4 flex flex-col items-center gap-2 shadow-sm col-span-2"
+          className="bg-white rounded-2xl p-4 flex flex-col items-center gap-2 shadow-sm"
         >
           <span className="text-3xl">🛵</span>
           <span className="font-semibold text-sm">Kuryer so&apos;rovlari</span>
+        </Link>
+        <Link
+          href="/restaurant/earnings"
+          className="bg-white rounded-2xl p-4 flex flex-col items-center gap-2 shadow-sm"
+        >
+          <span className="text-3xl">💰</span>
+          <span className="font-semibold text-sm">Daromad</span>
         </Link>
       </div>
 

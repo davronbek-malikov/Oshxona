@@ -14,6 +14,9 @@ const DeliveryMap = dynamic(() => import("@/components/checkout/DeliveryMap"), {
 type Restaurant = Database["public"]["Tables"]["restaurants"]["Row"];
 
 const DELIVERY_MINIMUM_KRW = 15000;
+const PLATFORM_BANK_NAME    = process.env.NEXT_PUBLIC_PLATFORM_BANK_NAME    ?? "하나은행 (Hana Bank)";
+const PLATFORM_BANK_ACCOUNT = process.env.NEXT_PUBLIC_PLATFORM_BANK_ACCOUNT ?? "123-456789-01234";
+const PLATFORM_BANK_HOLDER  = process.env.NEXT_PUBLIC_PLATFORM_BANK_HOLDER  ?? "Oshxona Platform";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -235,19 +238,19 @@ export default function CheckoutPage() {
           <p>2. {lang === "uz" ? "Skrinshot oling yoki pastda tasdiqlang." : "Upload a screenshot or confirm below."}</p>
         </div>
 
-        {/* Bank info */}
+        {/* Bank info — platform account */}
         <div className="space-y-2">
           <div className="p-3 bg-[#FAFAFA] rounded-2xl">
             <p className="text-[12px] text-[#AAAAAA]">{lang === "uz" ? "Bank" : "Bank"}</p>
-            <p className="font-bold text-[16px]">{restaurant.bank_name}</p>
+            <p className="font-bold text-[16px]">{PLATFORM_BANK_NAME}</p>
           </div>
           <div className="flex items-center justify-between p-3 bg-[#FAFAFA] rounded-2xl">
             <div>
               <p className="text-[12px] text-[#AAAAAA]">{lang === "uz" ? "Hisob raqami" : "Account number"}</p>
-              <p className="font-extrabold font-mono text-[17px]">{restaurant.bank_account_number}</p>
-              <p className="text-[12px] text-[#AAAAAA]">{restaurant.bank_account_holder}</p>
+              <p className="font-extrabold font-mono text-[17px]">{PLATFORM_BANK_ACCOUNT}</p>
+              <p className="text-[12px] text-[#AAAAAA]">{PLATFORM_BANK_HOLDER}</p>
             </div>
-            <button onClick={() => copy(restaurant.bank_account_number ?? "", "account")}
+            <button onClick={() => copy(PLATFORM_BANK_ACCOUNT, "account")}
               className="h-10 px-4 bg-primary/10 text-primary rounded-xl text-[13px] font-bold">
               {copied === "account" ? "✓" : lang === "uz" ? "Nusxa" : "Copy"}
             </button>

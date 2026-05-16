@@ -17,7 +17,7 @@ export default function RiderRoot() {
       if (res.status === 404) {
         router.replace("/rider/onboarding");
       } else {
-        router.replace("/rider/orders");
+        router.replace("/rider/dashboard");
       }
     }
     check();
