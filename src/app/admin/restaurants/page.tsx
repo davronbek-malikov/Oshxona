@@ -9,6 +9,7 @@ export default function AdminRestaurantsPage() {
   const [pending,  setPending]  = useState<Restaurant[]>([]);
   const [approved, setApproved] = useState<Restaurant[]>([]);
   const [loading,  setLoading]  = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [acting,   setActing]   = useState<string | null>(null);
 
   useEffect(() => {
@@ -17,7 +18,13 @@ export default function AdminRestaurantsPage() {
 
   async function load() {
     const res = await fetch("/api/admin/restaurants");
-    const all: Restaurant[] = res.ok ? await res.json() : [];
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setFetchError(`${res.status}: ${d.error ?? "Unknown error"}`);
+      setLoading(false);
+      return;
+    }
+    const all: Restaurant[] = await res.json();
     setPending(all.filter((r) => !r.is_approved));
     setApproved(all.filter((r) =>  r.is_approved));
     setLoading(false);
@@ -41,6 +48,21 @@ export default function AdminRestaurantsPage() {
 
   if (loading) {
     return <p className="text-muted-foreground text-center py-16">Loading...</p>;
+  }
+
+  if (fetchError) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center space-y-2">
+        <p className="font-bold text-red-700">Failed to load restaurants</p>
+        <p className="text-red-600 text-sm font-mono">{fetchError}</p>
+        {fetchError.startsWith("403") && (
+          <p className="text-sm text-muted-foreground mt-3">
+            Your account does not have <code>role = &quot;admin&quot;</code> in the database.
+            Go to Supabase → Table Editor → users → find your row → set role to <code>admin</code>.
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (
