@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 
 type Restaurant = Database["public"]["Tables"]["restaurants"]["Row"];
@@ -17,13 +16,8 @@ export default function AdminRestaurantsPage() {
   }, []);
 
   async function load() {
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("restaurants")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    const all = (data ?? []) as Restaurant[];
+    const res = await fetch("/api/admin/restaurants");
+    const all: Restaurant[] = res.ok ? await res.json() : [];
     setPending(all.filter((r) => !r.is_approved));
     setApproved(all.filter((r) =>  r.is_approved));
     setLoading(false);
