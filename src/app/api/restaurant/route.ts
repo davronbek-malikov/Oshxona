@@ -19,6 +19,28 @@ const schema = z.object({
   photos: z.array(z.string()).default([]),
 });
 
+export async function GET() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email?.endsWith("@oshxona.internal")) {
+    return NextResponse.json({ error: "Avtorizatsiya kerak" }, { status: 401 });
+  }
+
+  const phone = "+" + user.email.replace("@oshxona.internal", "");
+  const admin = createAdminClient();
+
+  const { data: dbUser } = await admin.from("users").select("id").eq("phone", phone).single();
+  if (!dbUser) return NextResponse.json({ restaurant: null });
+
+  const { data: restaurant } = await admin
+    .from("restaurants")
+    .select("*")
+    .eq("owner_id", dbUser.id)
+    .single();
+
+  return NextResponse.json({ restaurant: restaurant ?? null });
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -70,13 +70,10 @@ export default function AddMenuItemPage() {
     setSaving(true);
 
     try {
-      // Get restaurant id
-      const supabase = createClient();
-      const { data: r } = await supabase
-        .from("restaurants")
-        .select("id")
-        .eq("owner_id", user.id)
-        .single();
+      // Get restaurant id via API (bypasses RLS)
+      const rRes = await fetch("/api/restaurant");
+      const rJson = rRes.ok ? await rRes.json() : {};
+      const r = rJson.restaurant;
 
       if (!r) {
         alert("Restoran topilmadi");

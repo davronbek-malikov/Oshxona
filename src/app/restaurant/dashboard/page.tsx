@@ -23,15 +23,13 @@ export default function RestaurantDashboardPage() {
       return;
     }
     async function load() {
-      const supabase = createClient();
-      const { data: r } = await supabase
-        .from("restaurants")
-        .select("*")
-        .eq("owner_id", user!.id)
-        .single();
+      const res = await fetch("/api/restaurant");
+      const json = res.ok ? await res.json() : {};
+      const r: Restaurant | null = json.restaurant ?? null;
       setRestaurant(r);
 
       if (r) {
+        const supabase = createClient();
         const { data: o } = await supabase
           .from("orders")
           .select("*")
