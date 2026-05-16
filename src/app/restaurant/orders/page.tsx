@@ -9,6 +9,7 @@ import type { Database } from "@/types/database";
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
 interface OrderWithItems extends Order {
+  self_delivery?: boolean | null;
   order_items: Array<{
     id: string;
     quantity: number;
@@ -154,17 +155,27 @@ export default function RestaurantOrdersPage() {
     };
   }, [restaurantId]);
 
-  async function updateStatus(orderId: string, newStatus: Order["status"]) {
+  async function updateStatus(
+    orderId: string,
+    newStatus: Order["status"],
+    selfDelivery?: boolean,
+  ) {
     setUpdating(orderId);
     try {
+      const body: Record<string, unknown> = { status: newStatus };
+      if (selfDelivery !== undefined) body.self_delivery = selfDelivery;
       const res = await fetch(`/api/restaurant/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+          prev.map((o) =>
+            o.id === orderId
+              ? { ...o, status: newStatus, ...(selfDelivery !== undefined ? { self_delivery: selfDelivery } : {}) }
+              : o
+          )
         );
       }
     } finally {
@@ -245,7 +256,7 @@ export default function RestaurantOrdersPage() {
           key={order.id}
           order={order}
           updating={updating === order.id}
-          onUpdateStatus={(s) => updateStatus(order.id, s)}
+          onUpdateStatus={(s, selfDelivery) => updateStatus(order.id, s, selfDelivery)}
         />
       ))}
 
@@ -259,7 +270,7 @@ export default function RestaurantOrdersPage() {
               key={order.id}
               order={order}
               updating={updating === order.id}
-              onUpdateStatus={(s) => updateStatus(order.id, s)}
+              onUpdateStatus={(s, sd) => updateStatus(order.id, s, sd)}
             />
           ))}
         </>
@@ -275,7 +286,7 @@ function OrderCard({
 }: {
   order: OrderWithItems;
   updating: boolean;
-  onUpdateStatus: (status: Order["status"]) => void;
+  onUpdateStatus: (status: Order["status"], selfDelivery?: boolean) => void;
 }) {
   const [showReceipt, setShowReceipt] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -404,7 +415,32 @@ function OrderCard({
               🍳 Start preparing
             </button>
           )}
-          {order.status === "preparing" && (
+          {order.status === "preparing" && order.delivery_type === "delivery" && (
+            <div className="flex-1 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground text-center">
+                Yetkazib berish usulini tanlang:
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => onUpdateStatus("ready", false)}
+                  disabled={updating}
+                  className="flex-1 h-11 bg-[#F97316] text-white rounded-xl text-sm font-semibold disabled:opacity-50 flex flex-col items-center justify-center leading-tight"
+                >
+                  🛵 Kuryer
+                  <span className="text-[10px] opacity-80">chaqirish</span>
+                </button>
+                <button
+                  onClick={() => onUpdateStatus("ready", true)}
+                  disabled={updating}
+                  className="flex-1 h-11 bg-blue-500 text-white rounded-xl text-sm font-semibold disabled:opacity-50 flex flex-col items-center justify-center leading-tight"
+                >
+                  🚗 O&apos;zimiz
+                  <span className="text-[10px] opacity-80">yetkazamiz</span>
+                </button>
+              </div>
+            </div>
+          )}
+          {order.status === "preparing" && order.delivery_type !== "delivery" && (
             <button
               onClick={() => onUpdateStatus("ready")}
               disabled={updating}
@@ -413,14 +449,29 @@ function OrderCard({
               ✅ Mark ready
             </button>
           )}
-          {order.status === "ready" && (
+          {order.status === "ready" && order.self_delivery && (
             <button
               onClick={() => onUpdateStatus("delivered")}
               disabled={updating}
-              className="flex-1 h-10 bg-primary text-white rounded-xl text-sm font-semibold disabled:opacity-50"
+              className="flex-1 h-10 bg-blue-500 text-white rounded-xl text-sm font-semibold disabled:opacity-50"
             >
-              🛵 Mark delivered
+              🚗 Yetkazib berdim
             </button>
+          )}
+          {order.status === "ready" && !order.self_delivery && (
+            <div className="flex-1 flex items-center gap-2">
+              <div className="flex-1 h-10 bg-orange-50 border border-orange-200 rounded-xl flex items-center justify-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+                <span className="text-sm font-semibold text-orange-600">Kuryer kutilmoqda</span>
+              </div>
+              <button
+                onClick={() => onUpdateStatus("delivered")}
+                disabled={updating}
+                className="h-10 px-3 bg-primary text-white rounded-xl text-xs font-semibold disabled:opacity-50"
+              >
+                ✓
+              </button>
+            </div>
           )}
           {order.status !== "cancelled" && (
             <button

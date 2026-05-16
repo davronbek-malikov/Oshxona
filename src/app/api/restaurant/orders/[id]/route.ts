@@ -25,6 +25,7 @@ const schema = z.object({
     "delivered",
     "cancelled",
   ]),
+  self_delivery: z.boolean().optional(),
 });
 
 export async function PATCH(
@@ -49,6 +50,7 @@ export async function PATCH(
 
   const { id } = await ctx.params;
   const newStatus = parsed.data.status;
+  const selfDelivery = parsed.data.self_delivery;
   const admin = createAdminClient();
 
   // Fetch the order and its restaurant
@@ -93,14 +95,18 @@ export async function PATCH(
     return NextResponse.json({ error: "Ruxsat yo'q" }, { status: 403 });
   }
 
-  // Apply the update
-  const { error } = await admin
-    .from("orders")
-    .update({ status: newStatus })
-    .eq("id", id);
+  // Build update payload
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updatePayload: Record<string, any> = { status: newStatus };
+  if (newStatus === "ready" && selfDelivery !== undefined) {
+    updatePayload.self_delivery = selfDelivery;
+  }
 
-  // When delivery order becomes ready → mark it available for riders (separate update)
-  if (!error && newStatus === "ready" && order.delivery_type === "delivery") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (admin as any).from("orders").update(updatePayload).eq("id", id);
+
+  // When delivery order becomes ready via platform rider → mark it available for riders
+  if (!error && newStatus === "ready" && order.delivery_type === "delivery" && !selfDelivery) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (admin as any).from("orders").update({ rider_status: "waiting" }).eq("id", id);
   }
